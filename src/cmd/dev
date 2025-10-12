@@ -1,0 +1,82 @@
+import os
+import json
+from nextcord import Interaction, SlashOption, slash_command
+from nextcord.ext import commands
+
+from lib.tcg import SET_NAMES
+
+
+class Dev(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    @slash_command(description='nuke')
+    async def nuke(self, interaction: Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+
+        if str(interaction.user.id) != os.getenv('DEV_ID'):
+            await interaction.followup.send(
+                content='You do not have permission to perform this command',
+                ephemeral=True
+            )
+            return
+
+        await interaction.channel.clone()
+        await interaction.channel.delete()
+
+    @slash_command(description="Delete a user's set data")
+    async def wipe(self, interaction: Interaction,
+        user: str = SlashOption(
+            description='User ID',
+            required=True
+        ),
+        pack: str = SlashOption(
+            description='Pack data to delete',
+            required=True, autocomplete=True
+        ),
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+
+        if str(interaction.user.id) != os.getenv('DEV_ID'):
+            await interaction.followup.send(
+                content='You do not have permission to perform this command',
+                ephemeral=True
+            )
+            return
+
+        if os.path.exists(f'data/{user}/{pack}.json'):
+            os.remove(f'data/{user}/{pack}.json')
+            await interaction.followup.send(
+                content=f'Removed {pack} data for <@{user}>'
+            )
+            return
+
+        await interaction.followup.send(
+            content=f'<@{user}> has no data for {pack}'
+        )
+
+    @wipe.on_autocomplete('user')
+    async def user_autocomplete(self, interaction: Interaction, curr: str):
+        members = interaction.guild.members
+
+        if curr:
+            members = [m for m in members if curr.lower() in m.name.lower()]
+
+        choices = {
+            f'{m.display_name} ({m.name})': str(m.id) for m in members[:25]
+        }
+        await interaction.response.send_autocomplete(choices)
+
+    @wipe.on_autocomplete('pack')
+    async def pack_autocomplete(self, interaction: Interaction, curr: str):
+        if not curr:
+            matches = tuple(SET_NAMES.keys())
+        else:
+            matches = tuple(s for s in SET_NAMES if curr.lower() in s.lower())
+
+        choices = {m: SET_NAMES[m] for m in matches[:25]}
+        await interaction.response.send_autocomplete(choices)
+
+
+def setup(bot: commands.Bot):
+    bot.add_cog(Dev(bot))

@@ -187,7 +187,7 @@ def apply_base_filters(
             min_rating, max_rating = ratings[:2]
             if (float(min_rating) < 0) or (float(max_rating) > 0):
                 logger.warning('Rating range exceeds tolerable range: [1, 10]')
-            df = df[ratings[0] < df['averageRating'], ratings[1]]
+            df = df[df[ratings[0] <= df['averageRating'] <= ratings[1]]]
             logger.info(
                 f'{len(df):,} titles with ratings between {'-'.join(ratings)}'
             )
@@ -324,10 +324,14 @@ def main(base_filters={}, additional_filters={}) -> None:
 
     # --- Load IMDb datasets ---
     logger.info('Loading titles...')
-    basics = pd.read_csv(
-        'title.basics.tsv.gz', sep='\t', na_values='\\N', compression='gzip',
-        usecols=BASICS_COLS, low_memory=False
-    )
+    basics_list = []
+    chunks = pd.read_csv('title.basics.tsv.gz', sep='\t', na_values='\\N',
+                         compression='gzip', usecols=BASICS_COLS,
+                         chunksize=50_000)
+    for chunk in chunks:
+        chunk = chunk[chunk['titleType'] == 'movie']
+        basics_list.append(chunk)
+    basics = pd.concat(basics_list, ignore_index=True)
     logger.info(f'Loaded {len(basics):,} titles from basics dataset')
     ratings = pd.read_csv(
         'title.ratings.tsv.gz', sep='\t', na_values='\\N', compression='gzip',
