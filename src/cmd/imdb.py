@@ -1,10 +1,19 @@
 import os
 import json
+from random import randint
+
+import pandas as pd
 from nextcord import File, Interaction, SlashOption, slash_command
 from nextcord.ext import commands
 
 from lib.imdb import main as ss_maker
 
+GENRES = set()
+DATA = pd.read_excel('main.xlsx')
+for item in DATA:
+    GENRES.update(set(DATA['Genres'].split(',')))
+
+print(GENRES)
 
 class IMDb(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -59,6 +68,11 @@ class IMDb(commands.Cog):
             await interaction.followup.send(
                 file=File(f, 'imdb.xlsx')
             )
+
+    # @slash_command(description='Generate a random movie')
+    async def pickmovie(self, interaction: Interaction) -> None:
+        interaction.response.defer()
+
 
 
 def setup(bot: commands.Bot):
