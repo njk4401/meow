@@ -6,14 +6,19 @@ import pandas as pd
 from nextcord import File, Interaction, SlashOption, slash_command
 from nextcord.ext import commands
 
+from lib.imdb import fetch
 from lib.imdb import main as ss_maker
 
-GENRES = set()
-DATA = pd.read_excel('main.xlsx')
-for item in DATA:
-    GENRES.update(set(DATA['Genres'].split(',')))
 
-print(GENRES)
+API = 'https://api.imdbapi.dev'
+
+DATA = pd.read_excel('main.xlsx')
+GENRES = set(
+    genre.strip()
+    for entry in DATA['Genres'].dropna()
+    for genre in entry.split(',')
+)
+
 
 class IMDb(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -70,9 +75,35 @@ class IMDb(commands.Cog):
             )
 
     # @slash_command(description='Generate a random movie')
-    async def pickmovie(self, interaction: Interaction) -> None:
+    async def pickmovie(self, interaction: Interaction,
+        genre: str = SlashOption(
+            description='Limit movies to a specific genre',
+            required=False, autocomplete=True
+        )
+    ) -> None:
         interaction.response.defer()
 
+        df = DATA.copy()
+        if genre:
+            df = df[df['Genres'].str.contains(f'\b{genre}\b', case=False, na=False)]
+
+        pick = df.sample(n=1)
+
+        resp = fetch(f'{API}/titles/{pick['tconst']}')
+
+
+
+        await interaction.response.send_followup(pick)
+
+    @pickmovie.on_autocomplete('genre')
+    async def genre_autocomplete(self, interaction: Interaction, curr: str):
+        if not curr:
+            matches = tuple(GENRES)[:25]
+        else:
+            matches = tuple(g for g in GENRES if curr.lower() in g.lower())
+
+        choices = dict(zip(matches, matches))
+        await interaction.response.send_autocomplete(choices)
 
 
 def setup(bot: commands.Bot):
