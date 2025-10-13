@@ -185,11 +185,12 @@ def apply_base_filters(
     if ratings:
         try:
             min_rating, max_rating = ratings[:2]
-            if (float(min_rating) < 0) or (float(max_rating) > 0):
+            if (float(min_rating) < 1) or (float(max_rating) > 10):
                 logger.warning('Rating range exceeds tolerable range: [1, 10]')
-            df = df[df[ratings[0] <= df['averageRating'] <= ratings[1]]]
+            df = df[df['averageRating'].between(float(min_rating), float(max_rating))]
             logger.info(
-                f'{len(df):,} titles with ratings between {'-'.join(ratings)}'
+                f'{len(df):,} titles with ratings between '
+                f'{'-'.join(str(r) for r in ratings)}'
             )
         except (IndexError, TypeError, ValueError):
             logger.error(
