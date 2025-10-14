@@ -160,8 +160,8 @@ class IMDb(commands.Cog):
         )
         embed.set_image(resp['primaryImage']['url'])
         embed.add_field(name='Released', value=resp.get('startYear', 'N/A'))
-        embed.add_field(name='Runtime', value=timestr(resp.get('runtimeSeconds', 0))
-        embed.add_field(name='Rating', value=f'{pick['Rating']/10')
+        embed.add_field(name='Runtime', value=timestr(resp.get('runtimeSeconds', 0)))
+        embed.add_field(name='Rating', value=f'{pick['Rating'].values[0]}/10')
         embed.add_field(name='Country',
             value=f':flag_{resp['originCountries'][0]['code'].lower()}: '+pick['Country'].values[0]
         )
