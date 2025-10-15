@@ -1,8 +1,12 @@
 import os
+import asyncio
+from traceback import print_exception
+
 from dotenv import load_dotenv
 from nextcord import Intents, Interaction
 from nextcord.ext import commands
-from traceback import print_exception
+
+from src.control_server import start_control_server
 
 
 load_dotenv()
@@ -29,6 +33,7 @@ def load_cmd():
 
 @bot.event
 async def on_ready():
+    asyncio.create_task(start_control_server(bot))
     print('online')
 
 

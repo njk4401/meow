@@ -117,13 +117,13 @@ class IMDb(commands.Cog):
 
         df = DATA.copy()
         if genre:
-            if genre not in GENRES:
-                await interaction.followup.send('Unrecognized genre: "{genre}"')
+            if genre.lower() not in {g.lower() for g in GENRES}:
+                await interaction.followup.send(f'Unrecognized genre: "{genre}"')
                 return
-            df = df[df['Genres'].str.contains(genre, na=False)]
+            df = df[df['Genres'].str.contains(genre, case=False, na=False)]
         if country:
             if country not in COUNTRIES:
-                await interaction.followup.send('Unrecognized country: "{country}"')
+                await interaction.followup.send(f'Unrecognized country: "{country}"')
                 return
             df = df[df['Country'] == country]
         if year:
