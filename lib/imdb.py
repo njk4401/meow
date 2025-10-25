@@ -29,7 +29,7 @@ LOCAL_CACHE = 'local_data.csv'
 LOCAL_COLS = ('tconst', 'originCountry')
 
 # --- Setup logging ---
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+logging.basicConfig(level=logging.ERROR, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
 

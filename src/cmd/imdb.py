@@ -13,6 +13,10 @@ from lib.imdb import main as ss_maker
 API = 'https://api.imdbapi.dev'
 
 DATA = pd.read_excel('main.xlsx')
+TITLES = set(
+    title.strip()
+    for title in DATA['Title'].dropna()
+)
 GENRES = set(
     genre.strip()
     for entry in DATA['Genres'].dropna()
@@ -77,6 +81,51 @@ class IMDb(commands.Cog):
             await interaction.followup.send(
                 file=File(f, 'imdb.xlsx')
             )
+
+    @slash_command(description='Load info for a movie')
+    async def info(self, interaction: Interaction,
+        title: str = SlashOption(
+            description='Movie title',
+            autocomplete=True
+        )
+    ):
+        await interaction.response.defer()
+
+        if title.lower() not in {t.lower() for t in TITLES}:
+            await interaction.followup.send(f'Unrecognized title: "{title}"')
+            return
+
+        pick = DATA[DATA['Title'].str.lower().fillna('') == title.lower()]
+
+        resp = fetch(f'{API}/titles/{pick['tconst'].values[0]}')
+
+        if resp is None:
+            await interaction.followup.send('Fetch failed... Try again')
+            return
+
+        genres = [s['name'] for s in resp['interests'] if 'isSubgenre' not in s]
+        interests = [s['name'] for s in resp['interests'] if 'isSubgenre' in s]
+        if not genres:
+            genres = ['N/A']
+        if not interests:
+            interests = ['N/A']
+
+        embed = Embed(
+            title=resp['primaryTitle'],
+            url=f'https://www.imdb.com/title/{resp['id']}',
+            description=resp['plot']
+        )
+        embed.set_image(resp['primaryImage']['url'])
+        embed.add_field(name='Released', value=resp.get('startYear', 'N/A'))
+        embed.add_field(name='Runtime', value=timestr(resp.get('runtimeSeconds', 0)))
+        embed.add_field(name='Rating', value=f'{pick['Rating'].values[0]}/10')
+        embed.add_field(name='Country',
+            value=f':flag_{resp['originCountries'][0]['code'].lower()}: '+pick['Country'].values[0]
+        )
+        embed.add_field(name='Genres', value=', '.join(genres))
+        embed.add_field(name='Interests', value=', '.join(interests))
+
+        await interaction.followup.send(embed=embed)
 
     @slash_command(description='Generate a random movie')
     async def pickmovie(self, interaction: Interaction,
@@ -169,6 +218,16 @@ class IMDb(commands.Cog):
         embed.add_field(name='Interests', value=', '.join(interests))
 
         await interaction.followup.send(embed=embed)
+
+    @info.on_autocomplete('title')
+    async def title_autocomplete(self, interaction: Interaction, curr: str):
+        if not curr:
+            matches = sorted(TITLES)
+        else:
+            matches = sorted(t for t in TITLES if curr.lower() in t.lower())
+
+        choices = dict(zip(matches[:25], matches[:25]))
+        await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('genre')
     async def genre_autocomplete(self, interaction: Interaction, curr: str):
