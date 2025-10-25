@@ -6,31 +6,47 @@ import pandas as pd
 from nextcord import Embed, File, Interaction, SlashOption, slash_command
 from nextcord.ext import commands
 
-from lib.imdb import fetch
+from src.sql import IMDbCache
+from src.util import fetch
 from lib.imdb import main as ss_maker
 
 
 API = 'https://api.imdbapi.dev'
 
-DATA = pd.read_excel('main.xlsx')
-TITLES = set(
-    title.strip()
-    for title in DATA['Title'].dropna()
-)
-GENRES = set(
-    genre.strip()
-    for entry in DATA['Genres'].dropna()
-    for genre in entry.split(',')
-)
-COUNTRIES = set(
-    country.strip()
-    for country in DATA['Country'].dropna()
-)
+with IMDbCache() as cache:
+    DATA = pd.DataFrame(cache.query())
 
+TITLES = set(t.strip() for t in DATA['Title'].dropna())
+GENRES = set(g.strip() for e in DATA['Genres'].dropna() for g in e.split(','))
+COUNTRIES = set(c.split('(')[0].strip() for c in DATA['Country'].dropna())
 
 class IMDb(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    @slash_command(description='update local cache with new entries')
+    async def update(self, interaction: Interaction) -> None:
+        global DATA, TITLES, GENRES, COUNTRIES
+
+        await interaction.response.defer()
+
+        if str(interaction.user.id) not in {os.getenv('MY_ID'), os.getenv('JILL_ID')}:
+            await interaction.followup.send(
+                content='You do not have permission to perform this command'
+            )
+            return
+
+        before = len(DATA)
+        with IMDbCache() as cache:
+            DATA = pd.DataFrame(cache.query())
+
+        TITLES = set(t.strip() for t in DATA['Title'].dropna())
+        GENRES = set(g.strip() for e in DATA['Genres'].dropna() for g in e.split(','))
+        COUNTRIES = set(c.split('(')[0].strip() for c in DATA['Country'].dropna())
+
+        await interaction.followup.send(
+            content=f'Cache updated (+{len(DATA)-before} Entries)'
+        )
 
     @slash_command(description='create a spreadsheeet')
     async def spreadsheet(self, interaction: Interaction,
