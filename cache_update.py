@@ -18,7 +18,7 @@ with IMDbCache() as cache:
 
         # Cache in batches of 100
         for batch in chunks(ids, 100):
-            print(f'Caching {', '.join(batch)}')
+            print(f'\rCache Count - {cache.count()}', end='', flush=True)
             try:
                 cache.add(*batch)
             except Exception as e:
