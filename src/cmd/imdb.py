@@ -54,14 +54,15 @@ class IMDbCog(commands.Cog):
     #==========================================================================
     @slash_command(description='reload local cache with updated entries')
     async def reload(self, interaction: Interaction) -> None:
-        if not check_perms(str(interaction.user.id), MEDIUM_CLEARANCE):
+        await interaction.response.defer()
+        if not await check_perms(str(interaction.user.id), MEDIUM_CLEARANCE):
             await interaction.followup.send(
                 'You do not have permission to perform this command'
             )
             return
 
         summary = self._reload_cache()
-        await interaction.response.send_message(md.monospace(summary))
+        await interaction.followup.send(md.monospace(summary))
 
     @slash_command(description='create a spreadsheeet')
     async def spreadsheet(self, interaction: Interaction,
@@ -76,7 +77,7 @@ class IMDbCog(commands.Cog):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
 
-        if not check_perms(str(interaction.user.id), MEDIUM_CLEARANCE):
+        if not await check_perms(str(interaction.user.id), MEDIUM_CLEARANCE):
             await interaction.followup.send(
                 'You do not have permission to perform this command',
             )
