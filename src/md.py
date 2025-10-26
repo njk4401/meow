@@ -139,7 +139,7 @@ def format_list(s: Any, /, ordered: bool = False, *,
     # Fallback
     return f'{prefix}{bullet(start)} {s}'
 
-def monospace(s: Any, /) -> str:
+def mono(s: Any, /) -> str:
     """Return monospace text."""
     return f'`{s}`'
 
