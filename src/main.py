@@ -4,7 +4,7 @@ import asyncio
 from traceback import print_exception
 
 from dotenv import load_dotenv
-from nextcord import Intents, Interaction
+from nextcord import Intents, Interaction, InteractionType
 from nextcord.ext import commands
 
 from src.control_server import start_control_server
@@ -52,13 +52,18 @@ async def on_application_command_error(interaction: Interaction, e: Exception) -
         )
 
 
-@bot.event
-async def on_application_command(interaction: Interaction) -> None:
-    user = interaction.user
-    command = interaction.application_command
-    print(f'[{time.asctime()}] {user.name} ran the command /{command.name}')
-    if command.options:
-        print(*[f'  {arg}={val}\n' for arg, val in command.options.items()])
+# @bot.event
+# async def on_interaction(interaction: Interaction) -> None:
+#     if interaction.type == InteractionType.application_command:
+#         user = interaction.user
+#         command = interaction.data.get('name')
+#         print(f'[{time.asctime()}] {user} ran the command /{command}')
+#         for opt in interaction.data.get('options', {}):
+#             print(f'  {opt.get('name')} = {opt.get('value')}')
+#
+#         if not interaction.response.is_done():
+#             await interaction.response.defer()
+
 
 if __name__ == '__main__':
     TOKEN = os.getenv('BOT_TOKEN')

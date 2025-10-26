@@ -131,6 +131,7 @@ def autocomplete(vals: dict[str, Any] | Sequence[str],
             and values as what will be sent to Discord.
             If given as a sequence, will use the elements as autocompletions
             and also as what will be sent to Discord.
+            Can not be given an unhashable type.
         query (str):
             The current query.
 
@@ -139,7 +140,7 @@ def autocomplete(vals: dict[str, Any] | Sequence[str],
             Dictionary derived from `vals` where query was
             a substring in any of the keys or elements.
     """
-    # Cast to dict if given as a sequence of strings
+    # Cast to dict if given as a sequence
     if not isinstance(vals, dict):
         vals = dict(zip(vals, vals))
 

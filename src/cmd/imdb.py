@@ -62,7 +62,7 @@ class IMDbCog(commands.Cog):
             return
 
         summary = self._reload_cache()
-        await interaction.followup.send(md.monospace(summary))
+        await interaction.followup.send(md.mono(summary))
 
     @slash_command(description='create a spreadsheeet')
     async def spreadsheet(self, interaction: Interaction,
@@ -118,7 +118,7 @@ class IMDbCog(commands.Cog):
             data = cache.query(('primaryTitle', title))
 
         if not data:
-            await interaction.followup.send(f'No matches for "{title}"')
+            await interaction.followup.send(md.mono('No matches'))
             return
 
         await interaction.followup.send(embed=make_embed(data[0]))
@@ -183,19 +183,19 @@ class IMDbCog(commands.Cog):
     @info.on_autocomplete('title')
     async def title_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for title parameters."""
-        choices = autocomplete(self.titles, query)
+        choices = autocomplete(tuple(sorted(self.titles)), query)
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('genre')
     async def genre_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for genre parameters."""
-        choices = autocomplete(self.genres, query)
+        choices = autocomplete(tuple(sorted(self.genres)), query)
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('country')
     async def country_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for country parameters."""
-        choices = autocomplete(self.countries, query)
+        choices = autocomplete(tuple(sorted(self.countries)), query)
         await interaction.response.send_autocomplete(choices)
 
 
