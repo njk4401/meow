@@ -114,7 +114,6 @@ class IMDb(commands.Cog):
             await interaction.followup.send(f'No matches for "{title}"')
             return
 
-        print(data)
         pick = data[0]
 
         genres = pick.get('genres', [])
@@ -127,7 +126,7 @@ class IMDb(commands.Cog):
         embed = Embed(
             title=pick['primaryTitle'],
             url=f'https://www.imdb.com/title/{pick['id']}',
-            description=pick['plot']
+            description=pick.get('plot', 'N/A')
         )
         embed.set_image(pick['primaryImage']['url'])
         embed.add_field(name='Released', value=pick.get('startYear', 'N/A'))
@@ -205,7 +204,7 @@ class IMDb(commands.Cog):
         embed = Embed(
             title=pick['primaryTitle'],
             url=f'https://www.imdb.com/title/{pick['id']}',
-            description=pick['plot']
+            description=pick.get('plot', 'N/A')
         )
         embed.set_image(pick['primaryImage']['url'])
         embed.add_field(name='Released', value=pick.get('startYear', 'N/A'))
