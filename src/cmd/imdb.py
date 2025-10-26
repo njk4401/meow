@@ -1,66 +1,67 @@
-import os
-import json
 from random import randint
+from typing import Any
 
 import pandas as pd
 from nextcord import Embed, File, Interaction, SlashOption, slash_command
 from nextcord.ext import commands
 
+import src.md as md
 from src.sql import IMDbCache
-from src.util import fetch
+from src.util import autocomplete
+from src.permissions import MEDIUM_CLEARANCE, check_perms
 from lib.imdb import main as ss_maker
 
 
 API = 'https://api.imdbapi.dev'
 
-with IMDbCache() as cache:
-    DATA = pd.DataFrame(cache.query())
 
-TITLES = {t.strip() for t in DATA['primaryTitle'].dropna()}
-GENRES = {g.strip() for genre in DATA['genres'].dropna() for g in genre}
-COUNTRIES = {c[0].get('name', 'N/A').split('(')[0].strip() for c in DATA['originCountries'].dropna()}
+class IMDbCog(commands.Cog):
+    """Cog that handles IMDb related tasks."""
 
-class IMDb(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self._load_cache()
 
-    @slash_command(description='update local cache with new entries')
-    async def update(self, interaction: Interaction) -> None:
-        global DATA, TITLES, GENRES, COUNTRIES
+    #==========================================================================
+    # Internal
+    #==========================================================================
+    def _load_cache(self) -> None:
+        """Load local cache from SQL database."""
+        with IMDbCache() as cache:
+            data = pd.DataFrame(cache.query())
 
-        await interaction.response.defer()
+        self.data = data
+        self.titles = {t.strip() for t in data['primaryTitle'].dropna()}
+        self.genres = {g.strip() for genre in data['genres'].dropna()
+                                 for g in genre}
+        self.countries = {c[0].get('name', 'N/A').split('(')[0].strip()
+                          for c in data['originCountries'].dropna()}
 
-        if str(interaction.user.id) not in {os.getenv('MY_ID'), os.getenv('JILL_ID')}:
+    def _reload_cache(self) -> str:
+        """Reload local cache and return a diff summary."""
+        before = len(self.data)
+        self._load_cache()
+        return (
+            'Cache Successfully Reloaded\n'
+            f'Entries: {len(self.data)-before:+}\n'
+            f'Titles: {len(self.titles)}\n'
+            f'Genres: {len(self.genres)}\n'
+            f'Countries: {len(self.countries)}'
+        )
+
+    #==========================================================================
+    # Slash Commands
+    #==========================================================================
+    @slash_command(description='reload local cache with updated entries')
+    async def reload(self, interaction: Interaction) -> None:
+        if not check_perms(str(interaction.user.id), MEDIUM_CLEARANCE):
             await interaction.followup.send(
-                content='You do not have permission to perform this command'
+                'You do not have permission to perform this command'
             )
             return
 
-        before = len(DATA)
-        with IMDbCache() as cache:
-            DATA = pd.DataFrame(cache.query())
-
-        t_before = len(TITLES)
-        TITLES = {t.strip() for t in DATA['primaryTitle'].dropna()}
-        g_before = len(GENRES)
-        GENRES = {g.strip() for genre in DATA['genres'].dropna() for g in genre}
-        c_before = len(COUNTRIES)
-        COUNTRIES = {c[0].get('name', 'N/A').split('(')[0].strip() for c in DATA['originCountries'].dropna()}
-
-        if len(DATA) == before:
-            msg = 'Already up to date'
-        else:
-            msg = (
-                'Cache updated successfully\n'
-                f'+{len(DATA)-before} Entries\n'
-                f'+{len(TITLES)-t_before} Titles\n'
-                f'+{len(GENRES)-g_before} Genres\n'
-                f'+{len(COUNTRIES)-c_before} Countries'
-            )
-
-        await interaction.followup.send(
-            content=f'`{msg}`'
-        )
+        summary = self._reload_cache()
+        await interaction.response.send_message(md.monospace(summary))
 
     @slash_command(description='create a spreadsheeet')
     async def spreadsheet(self, interaction: Interaction,
@@ -75,10 +76,9 @@ class IMDb(commands.Cog):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
 
-        if str(interaction.user.id) not in {os.getenv('MY_ID'), os.getenv('JILL_ID')}:
+        if not check_perms(str(interaction.user.id), MEDIUM_CLEARANCE):
             await interaction.followup.send(
-                content='You do not have permission to perform this command',
-                ephemeral=True
+                'You do not have permission to perform this command',
             )
             return
 
@@ -86,43 +86,35 @@ class IMDb(commands.Cog):
         min_rating = min_rating or 1
 
         if min_votes < 1000:
-            await interaction.followup.send(
-                content='Minimum number of votes is 1000',
-                ephemeral=True
-            )
+            await interaction.followup.send('Minimum number of votes is 1000')
             return
 
         if not (1 <= min_rating <= 10):
-            await interaction.followup.send(
-                content='Valid for minimum ranking: [1, 10]',
-                ephemeral=True
-            )
+            await interaction.followup.send('Valid minimum ranking: [1, 10]')
             return
 
         ss_maker(
             base_filters=dict(
                 titles={'movie'},
                 min_votes=min_votes,
-                ratings=(min_rating, 10))
+                ratings=(min_rating, 10)
+            )
         )
 
-
         with open('imdb.xlsx', 'rb') as f:
-            await interaction.followup.send(
-                file=File(f, 'imdb.xlsx')
-            )
+            await interaction.followup.send(file=File(f, 'imdb.xlsx'))
 
-    @slash_command(description='Load info for a movie')
+    @slash_command(description='get info for a movie')
     async def info(self, interaction: Interaction,
         title: str = SlashOption(
-            description='Movie title',
+            description='movie title',
             autocomplete=True
         )
     ) -> None:
         await interaction.response.defer()
 
         with IMDbCache() as cache:
-            data = (cache.query(('primaryTitle', title)))
+            data = cache.query(('primaryTitle', title))
 
         if not data:
             await interaction.followup.send(f'No matches for "{title}"')
@@ -130,38 +122,38 @@ class IMDb(commands.Cog):
 
         await interaction.followup.send(embed=make_embed(data[0]))
 
-    @slash_command(description='Generate a random movie')
+    @slash_command(description='pick a random movie based on filters')
     async def pickmovie(self, interaction: Interaction,
         genre: str = SlashOption(
-            description='Limit movies to a specific genre',
+            description='limit movies to a specific genre',
             required=False, autocomplete=True
         ),
         country: str = SlashOption(
-            description='Limit movies released in a specific country',
+            description='limit movies released in a specific country',
             required=False, autocomplete=True
         ),
         year: int = SlashOption(
-            description='Limit movies to a specific year',
+            description='limit movies to a specific year',
             required=False
         ),
         year_min: int = SlashOption(
-            description='Limit movies released after or during the given year',
+            description='limit movies released after the given year',
             required=False, default=0
         ),
         year_max: int = SlashOption(
-            description='Limit movies released before or during the given year',
+            description='limit movies released before the given year',
             required=False, default=3000
         ),
         rating: int = SlashOption(
-            description='Limit movies to a specific rating',
+            description='limit movies to a specific rating',
             required=False, choices=range(1, 11)
         ),
         rating_min: float = SlashOption(
-            description='Limit movies with a rating of at least the given rating',
+            description='limit movies to a minimum rating',
             required=False, default=1
         ),
         rating_max: float = SlashOption(
-            description='Limit movies with a rating of at most the given rating',
+            description='limit movies to a maximum rating',
             required=False, default=10
         )
     ) -> None:
@@ -181,40 +173,50 @@ class IMDb(commands.Cog):
             await interaction.followup.send('No matches for the given filter')
             return
 
-        await interaction.followup.send(embed=make_embed(data[randint(0, len(data)-1)]))
+        pick = data[randint(0, len(data)-1)]
+        await interaction.followup.send(embed=make_embed(pick))
 
+    #==========================================================================
+    # Autocompletes
+    #==========================================================================
     @info.on_autocomplete('title')
-    async def title_autocomplete(self, interaction: Interaction, curr: str):
-        if not curr:
-            matches = sorted(TITLES)
-        else:
-            matches = sorted(t for t in TITLES if curr.lower() in t.lower())
-
-        choices = dict(zip(matches[:25], matches))
+    async def title_ac(self, interaction: Interaction, query: str) -> None:
+        """Autocompletion for title parameters."""
+        choices = autocomplete(self.titles, query)
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('genre')
-    async def genre_autocomplete(self, interaction: Interaction, curr: str):
-        if not curr:
-            matches = sorted(GENRES)
-        else:
-            matches = sorted(g for g in GENRES if curr.lower() in g.lower())
-
-        choices = dict(zip(matches[:25], matches))
+    async def genre_ac(self, interaction: Interaction, query: str) -> None:
+        """Autocompletion for genre parameters."""
+        choices = autocomplete(self.genres, query)
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('country')
-    async def country_autocomplete(self, interaction: Interaction, curr: str):
-        if not curr:
-            matches = sorted(COUNTRIES)
-        else:
-            matches = sorted(c for c in COUNTRIES if curr.lower() in c.lower())
-
-        choices = dict(zip(matches[:25], matches))
+    async def country_ac(self, interaction: Interaction, query: str) -> None:
+        """Autocompletion for country parameters."""
+        choices = autocomplete(self.countries, query)
         await interaction.response.send_autocomplete(choices)
 
 
-def make_embed(entry) -> Embed:
+def make_embed(entry: dict[str, Any]) -> Embed:
+    """Generate an IMDb breakdown embed for an entry in the SQL database."""
+    if (tconst := entry.get('id')) is not None:
+        imdb_link = f'https://www.imdb.com/title/{tconst}'
+    else:
+        imdb_link = None
+
+    embed = Embed(
+        title=entry.get('primaryTitle', 'Unknown'),
+        url=imdb_link,
+        description=entry.get('plot', 'N/A')
+    )
+
+    image = entry.get('primaryImage', {}).get('url')
+    if image is not None:
+        embed.set_image(entry.get('primaryImage', {}).get('url'))
+
+    embed.add_field(name='Released', value=str(entry.get('startYear', 'N/A')))
+
     genres = entry.get('genres', [])
     interests = [s['name'] for s in entry.get('interests', {}) if 'isSubgenre' in s]
     if not genres:
@@ -222,13 +224,6 @@ def make_embed(entry) -> Embed:
     if not interests:
         interests = ['N/A']
 
-    embed = Embed(
-        title=entry['primaryTitle'],
-        url=f'https://www.imdb.com/title/{entry['id']}',
-        description=entry.get('plot', 'N/A')
-    )
-    embed.set_image(entry['primaryImage']['url'])
-    embed.add_field(name='Released', value=entry.get('startYear', 'N/A'))
     embed.add_field(name='Runtime', value=timestr(entry.get('runtimeSeconds', 'N/A')))
     embed.add_field(name='Rating', value=f'{entry['rating']['aggregateRating']}/10')
     embed.add_field(name='Country',
@@ -252,4 +247,4 @@ def timestr(sec: float) -> str:
 
 
 def setup(bot: commands.Bot):
-    bot.add_cog(IMDb(bot))
+    bot.add_cog(IMDbCog(bot))
