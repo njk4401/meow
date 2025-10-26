@@ -16,9 +16,9 @@ API = 'https://api.imdbapi.dev'
 with IMDbCache() as cache:
     DATA = pd.DataFrame(cache.query())
 
-TITLES = set(t.strip() for t in DATA['Title'].dropna())
-GENRES = set(g.strip() for e in DATA['Genres'].dropna() for g in e.split(','))
-COUNTRIES = set(c.split('(')[0].strip() for c in DATA['Country'].dropna())
+TITLES = {t.strip() for t in DATA['primaryTitle'].dropna()}
+GENRES = {g.strip() for genre in DATA['genres'].dropna() for g in genre}
+COUNTRIES = {c[0].get('name', 'N/A').split('(')[0].strip() for c in DATA['originCountries'].dropna()}
 
 class IMDb(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -40,9 +40,9 @@ class IMDb(commands.Cog):
         with IMDbCache() as cache:
             DATA = pd.DataFrame(cache.query())
 
-        TITLES = set(t.strip() for t in DATA['Title'].dropna())
-        GENRES = set(g.strip() for e in DATA['Genres'].dropna() for g in e.split(','))
-        COUNTRIES = set(c.split('(')[0].strip() for c in DATA['Country'].dropna())
+        TITLES = {t.strip() for t in DATA['primaryTitle'].dropna()}
+        GENRES = {g.strip() for genre in DATA['genres'].dropna() for g in genre}
+        COUNTRIES = {c[0].get('name', 'N/A').split('(')[0].strip() for c in DATA['originCountries'].dropna()}
 
         await interaction.followup.send(
             content=f'Cache updated (+{len(DATA)-before} Entries)'
