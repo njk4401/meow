@@ -34,7 +34,7 @@ with IMDbCache() as cache:
 
         # Cache in batches of 5
         for i, batch in enumerate(chunks(sorted(ids), 5)):
-            print(f'\r\x1b[0KCache Count: {cache.count()} ({i*5/len(ids):.2f}%)', end='', flush=True)
+            print(f'\r\x1b[0KCache Count: {cache.count()} ({((i*5)/len(ids))*100:.2f}%)', end='', flush=True)
             try:
                 cache.add(*batch)
             except Exception as e:
