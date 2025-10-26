@@ -40,12 +40,26 @@ class IMDb(commands.Cog):
         with IMDbCache() as cache:
             DATA = pd.DataFrame(cache.query())
 
+        t_before = len(TITLES)
         TITLES = {t.strip() for t in DATA['primaryTitle'].dropna()}
+        g_before = len(GENRES)
         GENRES = {g.strip() for genre in DATA['genres'].dropna() for g in genre}
+        c_before = len(COUNTRIES)
         COUNTRIES = {c[0].get('name', 'N/A').split('(')[0].strip() for c in DATA['originCountries'].dropna()}
 
+        if len(DATA) == before:
+            msg = 'Already up to date'
+        else:
+            msg = (
+                'Cache updated successfully\n'
+                f'+{len(DATA)-before} Entries\n'
+                f'+{len(TITLES)-t_before} Titles\n'
+                f'+{len(GENRES)-g_before} Genres\n'
+                f'+{len(COUNTRIES)-c_before} Countries'
+            )
+
         await interaction.followup.send(
-            content=f'Cache updated (+{len(DATA)-before} Entries)'
+            content=f'`{msg}`'
         )
 
     @slash_command(description='create a spreadsheeet')
