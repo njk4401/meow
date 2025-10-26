@@ -18,11 +18,6 @@ class IMDbCache:
     def __init__(self, db: PathLike = MAIN_DB, ttl: float = FULL_DAY) -> None:
         """Create a new IMDb SQLite cache instance.
 
-        Note:
-            A deliberate call to close() is needed if not called
-            with the `with` keyword to ensure the connection to
-            the database is securely closed.
-
         Parameters:
             db (PathLike):
                 Path to the SQLite database.
@@ -196,6 +191,10 @@ class IMDbCache:
                 return
 
             if not rem:
+                if value is None:
+                    matches.append(data)
+                    return
+
                 if isinstance(curr, list):
                     if any(match_leaf(v) for v in curr):
                         matches.append(data)

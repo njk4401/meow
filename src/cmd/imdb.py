@@ -154,20 +154,20 @@ class IMDb(commands.Cog):
         await interaction.response.defer()
 
         with IMDbCache() as cache:
-            data = pd.DataFrame(cache.query(
+            data = cache.query(
                 ('genres[*]', genre),
-                ('originCountry[*].name', country),
+                ('originCountries[*].name', country),
                 ('startYear', year),
                 ('startYear', (year_min, year_max)),
                 ('rating.aggregateRating', rating),
                 ('rating.aggregateRating', (rating_min, rating_max))
-            ))
+            )
 
         if not data:
             await interaction.followup.send('No matches for the given filter')
             return
 
-        await interaction.followup.send(embed=make_embed(data.sample(1)))
+        await interaction.followup.send(embed=make_embed(data[randint(0, len(data)-1)]))
 
     @info.on_autocomplete('title')
     async def title_autocomplete(self, interaction: Interaction, curr: str):
@@ -176,27 +176,27 @@ class IMDb(commands.Cog):
         else:
             matches = sorted(t for t in TITLES if curr.lower() in t.lower())
 
-        choices = dict(zip(matches[:25], matches[:25]))
+        choices = dict(zip(matches[:25], matches))
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('genre')
     async def genre_autocomplete(self, interaction: Interaction, curr: str):
         if not curr:
-            matches = tuple(GENRES)[:25]
+            matches = sorted(GENRES)
         else:
-            matches = tuple(g for g in GENRES if curr.lower() in g.lower())
+            matches = sorted(g for g in GENRES if curr.lower() in g.lower())
 
-        choices = dict(zip(matches, matches))
+        choices = dict(zip(matches[:25], matches))
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('country')
     async def country_autocomplete(self, interaction: Interaction, curr: str):
         if not curr:
-            matches = tuple(COUNTRIES)[:25]
+            matches = sorted(COUNTRIES)
         else:
-            matches = tuple(c for c in COUNTRIES if curr.lower() in c.lower())
+            matches = sorted(c for c in COUNTRIES if curr.lower() in c.lower())
 
-        choices = dict(zip(matches, matches))
+        choices = dict(zip(matches[:25], matches))
         await interaction.response.send_autocomplete(choices)
 
 
@@ -223,6 +223,8 @@ def make_embed(entry) -> Embed:
     )
     embed.add_field(name='Genres', value=', '.join(genres))
     embed.add_field(name='Interests', value=', '.join(interests))
+
+    return embed
 
 
 def timestr(sec: float) -> str:
