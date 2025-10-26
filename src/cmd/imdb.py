@@ -114,32 +114,7 @@ class IMDb(commands.Cog):
             await interaction.followup.send(f'No matches for "{title}"')
             return
 
-        pick = data[0]
-
-        genres = pick.get('genres', [])
-        interests = [s['name'] for s in pick.get('interests', {}) if 'isSubgenre' in s]
-        if not genres:
-            genres = ['N/A']
-        if not interests:
-            interests = ['N/A']
-
-        embed = Embed(
-            title=pick['primaryTitle'],
-            url=f'https://www.imdb.com/title/{pick['id']}',
-            description=pick.get('plot', 'N/A')
-        )
-        embed.set_image(pick['primaryImage']['url'])
-        embed.add_field(name='Released', value=pick.get('startYear', 'N/A'))
-        embed.add_field(name='Runtime', value=timestr(pick.get('runtimeSeconds', 'N/A')))
-        embed.add_field(name='Rating', value=f'{pick['rating']['aggregateRating']}/10')
-        embed.add_field(name='Country',
-            value=f':flag_{pick['originCountries'][0]['code'].lower()}: '
-                  f'{pick['originCountries'][0]['name'].split('(')[0].strip()}'
-        )
-        embed.add_field(name='Genres', value=', '.join(genres))
-        embed.add_field(name='Interests', value=', '.join(interests))
-
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=make_embed(data[0]))
 
     @slash_command(description='Generate a random movie')
     async def pickmovie(self, interaction: Interaction,
@@ -179,45 +154,20 @@ class IMDb(commands.Cog):
         await interaction.response.defer()
 
         with IMDbCache() as cache:
-            data = cache.query(
+            data = pd.DataFrame(cache.query(
                 ('genres[*]', genre),
                 ('originCountry[*].name', country),
                 ('startYear', year),
                 ('startYear', (year_min, year_max)),
                 ('rating.aggregateRating', rating),
                 ('rating.aggregateRating', (rating_min, rating_max))
-            )
+            ))
 
         if not data:
             await interaction.followup.send('No matches for the given filter')
             return
 
-        pick = pd.DataFrame(data).sample(1).to_dict()
-
-        genres = pick.get('genres', [])
-        interests = [s['name'] for s in pick.get('interests', {}) if 'isSubgenre' in s]
-        if not genres:
-            genres = ['N/A']
-        if not interests:
-            interests = ['N/A']
-
-        embed = Embed(
-            title=pick['primaryTitle'],
-            url=f'https://www.imdb.com/title/{pick['id']}',
-            description=pick.get('plot', 'N/A')
-        )
-        embed.set_image(pick['primaryImage']['url'])
-        embed.add_field(name='Released', value=pick.get('startYear', 'N/A'))
-        embed.add_field(name='Runtime', value=timestr(pick.get('runtimeSeconds', 'N/A')))
-        embed.add_field(name='Rating', value=f'{pick['rating']['aggregateRating']}/10')
-        embed.add_field(name='Country',
-            value=f':flag_{pick['originCountries'][0]['code'].lower()}: '
-                  f'{pick['originCountries'][0]['name'].split('(')[0].strip()}'
-        )
-        embed.add_field(name='Genres', value=', '.join(genres))
-        embed.add_field(name='Interests', value=', '.join(interests))
-
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=make_embed(data.sample(1)))
 
     @info.on_autocomplete('title')
     async def title_autocomplete(self, interaction: Interaction, curr: str):
@@ -248,6 +198,31 @@ class IMDb(commands.Cog):
 
         choices = dict(zip(matches, matches))
         await interaction.response.send_autocomplete(choices)
+
+
+def make_embed(entry) -> Embed:
+    genres = entry.get('genres', [])
+    interests = [s['name'] for s in entry.get('interests', {}) if 'isSubgenre' in s]
+    if not genres:
+        genres = ['N/A']
+    if not interests:
+        interests = ['N/A']
+
+    embed = Embed(
+        title=entry['primaryTitle'],
+        url=f'https://www.imdb.com/title/{entry['id']}',
+        description=entry.get('plot', 'N/A')
+    )
+    embed.set_image(entry['primaryImage']['url'])
+    embed.add_field(name='Released', value=entry.get('startYear', 'N/A'))
+    embed.add_field(name='Runtime', value=timestr(entry.get('runtimeSeconds', 'N/A')))
+    embed.add_field(name='Rating', value=f'{entry['rating']['aggregateRating']}/10')
+    embed.add_field(name='Country',
+        value=f':flag_{entry['originCountries'][0]['code'].lower()}: '
+                f'{entry['originCountries'][0]['name'].split('(')[0].strip()}'
+    )
+    embed.add_field(name='Genres', value=', '.join(genres))
+    embed.add_field(name='Interests', value=', '.join(interests))
 
 
 def timestr(sec: float) -> str:
