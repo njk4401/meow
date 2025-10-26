@@ -1,9 +1,8 @@
 import os
-import json
 import time
-import sqlite3
+from functools import lru_cache
 from itertools import islice
-from typing import Generator, Iterable, Sequence
+from typing import Any, Generator, Iterable, Sequence
 
 import requests
 
@@ -11,14 +10,8 @@ import requests
 #==============================================================================
 # Misc. utility
 #==============================================================================
-def chunks(it: Iterable, n: int) -> Generator[list]:
-    """Separate an iterable into chunks of `n` items.
-    ```
-    # Example:
-    for batch in chunks(data, 5):
-        ...
-    ```
-    """
+def chunks(it: Iterable, n: int) -> Generator[list, None, None]:
+    """Separate an iterable into chunks of `n` items."""
     if n <= 0:
         raise ValueError('chunksize must be positive')
 
@@ -123,3 +116,37 @@ def fetch(url: str, timeout: float = 15, retries: int = 5) -> JSON | None:
         except requests.RequestException:
             time.sleep(2**(attempt+1))
     return None
+
+#==============================================================================
+# Discord related
+#==============================================================================
+@lru_cache
+def autocomplete(vals: dict[str, Any] | Sequence[str],
+                 query: str) -> dict[str, Any]:
+    """Generate a dictionary of autocompletions based on a query.
+
+    Parameters:
+        vals (dict | Sequence):
+            If given as a dict, will use the keys as autocompletions
+            and values as what will be sent to Discord.
+            If given as a sequence, will use the elements as autocompletions
+            and also as what will be sent to Discord.
+        query (str):
+            The current query.
+
+    Returns:
+        matches (dict):
+            Dictionary derived from `vals` where query was
+            a substring in any of the keys or elements.
+    """
+    # Cast to dict if given as a sequence of strings
+    if not isinstance(vals, dict):
+        vals = dict(zip(vals, vals))
+
+    if not query:
+        matches = sorted(vals.keys())
+    else:
+        matches = sorted(v for v in vals if query.lower() in v.lower())
+
+    # Discord has a limit of 25 autocompletions
+    return {key: vals[key] for key in matches[:25]}
