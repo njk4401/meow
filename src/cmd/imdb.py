@@ -8,7 +8,7 @@ from nextcord.ext import commands
 import src.md as md
 from src.sql import IMDbCache
 from src.util import autocomplete
-from src.permissions import MEDIUM_CLEARANCE, check_perms
+from src.permissions import MEDIUM_CLEARANCE, has_clearance
 from lib.imdb import main as ss_maker
 
 
@@ -53,18 +53,14 @@ class IMDbCog(commands.Cog):
     # Slash Commands
     #==========================================================================
     @slash_command(description='reload local cache with updated entries')
+    @has_clearance(MEDIUM_CLEARANCE)
     async def reload(self, interaction: Interaction) -> None:
         await interaction.response.defer()
-        if not await check_perms(str(interaction.user.id), MEDIUM_CLEARANCE):
-            await interaction.followup.send(
-                'You do not have permission to perform this command'
-            )
-            return
-
         summary = self._reload_cache()
         await interaction.followup.send(md.mono(summary))
 
     @slash_command(description='create a spreadsheeet')
+    @has_clearance(MEDIUM_CLEARANCE)
     async def spreadsheet(self, interaction: Interaction,
         min_votes: int = SlashOption(
             description='minimum number of votes title must have',
@@ -76,12 +72,6 @@ class IMDbCog(commands.Cog):
         )
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-
-        if not await check_perms(str(interaction.user.id), MEDIUM_CLEARANCE):
-            await interaction.followup.send(
-                'You do not have permission to perform this command',
-            )
-            return
 
         min_votes = min_votes or 1000
         min_rating = min_rating or 1

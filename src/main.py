@@ -1,13 +1,15 @@
 import os
-import time
 import asyncio
-from traceback import print_exception
+import logging
 
 from dotenv import load_dotenv
 from nextcord import Intents, Interaction, InteractionType
 from nextcord.ext import commands
 
 from src.control_server import start_control_server
+
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s::%(message)s')
 
 
 load_dotenv()
@@ -27,21 +29,24 @@ def load_cmd() -> None:
         rel_path = f'src.cmd.{os.path.splitext(os.path.basename(file))[0]}'
         try:
             bot.load_extension(rel_path)
-            print(f'Loaded command module: {rel_path}')
-        except Exception as e:
-            print(f'Failed to load command module: {rel_path}\nError: {e}')
+            logging.info(f'Loaded command module: {rel_path}')
+        except Exception:
+            logging.exception(f'Failed to load command module: {rel_path}')
 
 
 @bot.event
 async def on_ready() -> None:
     asyncio.create_task(start_control_server(bot))
-    print('online')
+    logging.info(f'Logged in as {bot.user}')
 
 
 @bot.event
-async def on_application_command_error(interaction: Interaction, e: Exception) -> None:
-    print(f'Error running /{interaction.application_command.name}:')
-    print_exception(type(e), e, e.__traceback__)
+async def on_application_command_error(
+    interaction: Interaction, e: Exception
+) -> None:
+    logging.execption(
+        f'Error running /{interaction.application_command.name}:'
+    )
     if interaction.response.is_done():
         await interaction.followup.send(
             'Error - Check log for details', ephemeral=True

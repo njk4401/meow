@@ -1,9 +1,12 @@
 import os
 import time
+import asyncio
+import logging
 from functools import lru_cache
 from itertools import islice
 from typing import Any, Generator, Iterable, Sequence
 
+import aiohttp
 import requests
 
 
@@ -92,8 +95,10 @@ type JSONObject = dict[str, JSONArray | JSONObject | JSONPrimitive]
 type JSONArray = list[JSONArray | JSONObject | JSONPrimitive]
 type JSONPrimitive = bool | float | str
 
-def fetch(url: str, timeout: float = 15, retries: int = 5) -> JSON | None:
-    """Fetch a JSON url endpoint.
+async def fetch(
+    url: str, timeout: float = 15, retries: int = 5
+) -> JSON | None:
+    """Fetch a JSON url endpoint asynchronously.
 
     Parameters:
         url (str):
@@ -107,14 +112,25 @@ def fetch(url: str, timeout: float = 15, retries: int = 5) -> JSON | None:
         response (JSON | None):
             JSON response if fetch was successful, otherwise None.
     """
-    for attempt in range(retries):
-        try:
-            resp = requests.get(url, timeout=timeout)
-            resp.raise_for_status()
-            return resp.json()
-        # If error raised, wait and retry
-        except requests.RequestException:
-            time.sleep(2**(attempt+1))
+    async with aiohttp.ClientSession() as session:
+        for attempt in range(retries):
+            try:
+                async with session.get(url, timeout=timeout) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
+            # If error raised, wait and retry
+            except aiohttp.ClientError as e:
+                logging.warning(
+                    f'Fetch attempt {attempt+1} failed for {url}: {e}'
+                )
+                # Non-blocking delay
+                await asyncio.sleep(2**(attempt+1))
+            except asyncio.TimeoutError:
+                logging.warning(
+                    f'Fetch attempt {attempt+1} timed out for {url}'
+                )
+
+    logging.error(f'Failed to fetch {url} after {retries} attempts')
     return None
 
 #==============================================================================
