@@ -9,8 +9,8 @@ from nextcord.ext import commands
 from src.control_server import start_control_server
 
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s::%(message)s')
-
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+logging.getLogger('nextcord').setLevel(logging.WARNING)
 
 load_dotenv()
 
