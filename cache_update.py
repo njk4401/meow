@@ -34,10 +34,10 @@ def id_update_task() -> None:
         )
 
         if not any(files_downloaded) and movie_ids:
-            logging.info('No new files')
+            logging.info('  No new files')
             return
 
-        logging.info('Fresh data found. Reloading database on disk...')
+        logging.info('  Fresh data found. Reloading database on disk...')
 
         basics = []
         sections = pd.read_csv(
@@ -57,7 +57,7 @@ def id_update_task() -> None:
         # Filter only movies with ratings
         basics = basics.merge(ratings, on='tconst', how='inner')
 
-        logging.info('Database reloaded')
+        logging.info('    Database reloaded')
         movie_ids.update(basics['tconst'])
         logging.info(f'Total Entries: {len(movie_ids)}')
     except Exception:
@@ -78,7 +78,7 @@ async def main() -> None:
                 continue
 
             total_ids = len(movie_ids)
-            start_time = int(time.time())
+            start_time = time.time()
 
             for i, batch in enumerate(chunks(sorted(movie_ids), 5)):
                 try:
@@ -86,16 +86,16 @@ async def main() -> None:
                 except Exception as e:
                     logging.error(f'Failed to cache batch: {batch} - {e}')
 
-                if i > 0 and i % 10 == 0:
-                    elapsed = timestr(int(time.time()) - start_time)
+                if i > 0 and i % 1000 == 0:
+                    elapsed = timestr(time.time() - start_time)
                     progress = ((i*5)/total_ids) * 100
                     print(
-                        f'\rProgress: {progress:.2f}% '
+                        f'\r\x1b[0KProgress: {progress:.2f}% '
                         f'(Elapsed: {elapsed})',
                         end='', flush=True
                     )
 
-            elapsed = timestr(int(time.time()) - start_time)
+            elapsed = timestr(time.time() - start_time)
             logging.info(f'Refresh finished in {elapsed}. Sleeping...')
             await asyncio.sleep(ONE_HOUR)
         except Exception:
