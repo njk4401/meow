@@ -26,13 +26,6 @@ class IMDbCache:
                 Path to the SQLite database.
             ttl (float):
                 Time-to-live for cached entries in seconds.
-
-        Example:
-        ```
-            async with IMDbCache() as cache:
-                await cache.add('tt003234', 'tt1234567')
-                entries = await cache.query('startYear', 1996)
-        ```
         """
         self.db = db
         self.ttl = ttl
