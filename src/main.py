@@ -44,7 +44,7 @@ async def on_ready() -> None:
 async def on_application_command_error(
     interaction: Interaction, e: Exception
 ) -> None:
-    logging.execption(
+    logging.exception(
         f'Error running /{interaction.application_command.name}:'
     )
     if interaction.response.is_done():
