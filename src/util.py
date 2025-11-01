@@ -130,9 +130,11 @@ async def fetch(
                     return await resp.json()
             # If error raised, wait and retry
             except aiohttp.ClientError as e:
-                logging.warning(
-                    f'Fetch attempt {attempt+1} failed for {url}: {e}'
-                )
+                # Mute rate limits
+                if resp.status != 429:
+                    logging.warning(
+                        f'Fetch attempt {attempt+1} failed for {url}: {e}'
+                    )
                 # Non-blocking delay
                 await asyncio.sleep(2**(attempt+1))
             except asyncio.TimeoutError:
@@ -165,9 +167,11 @@ def fetch_sync(url: str, timeout: float = 15, retries: int = 5) -> JSON | None:
             return resp.json()
         # If error raised, wait and retry
         except requests.RequestException as e:
-            logging.warning(
-                f'Fetch attempt {attempt+1} failed for {url}: {e}'
-            )
+            # Mute rate limits
+            if resp.status_code != 429:
+                logging.warning(
+                    f'Fetch attempt {attempt+1} failed for {url}: {e}'
+                )
             # Blocking delay
             time.sleep(2**(attempt+1))
         except requests.ConnectTimeout:
