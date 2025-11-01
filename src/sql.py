@@ -16,7 +16,7 @@ FULL_DAY = 24*60*60
 
 
 class IMDbCache:
-    """Asynchronous IMDb cache via local SQLite storage."""
+    """Manages asynchronous access to the SQLite IMDb cache."""
 
     def __init__(self, db: PathLike = MAIN_DB, ttl: float = FULL_DAY) -> None:
         """Create a new IMDb SQLite cache instance.
@@ -50,7 +50,6 @@ class IMDbCache:
                 last_updated REAL NOT NULL
             )
         """)
-        conn.commit()
         return conn, cur
 
     def _get_sql_condition(self, key: str, value: Any) -> tuple[str, tuple]:
@@ -189,7 +188,8 @@ class IMDbCache:
 
     def _autocomplete_task(
             self, query: str, key: str, *, n: int = 25,
-            post_proc: Callable[[str], str] = None
+            post_proc: Callable[[str], str] = None,
+            sort_key: Callable[[Any], Any] = None
     ) -> dict[str, str]:
         """Task to be ran by executor for generating autocompletion results."""
         conn, cur = self._sql_setup()
@@ -225,6 +225,9 @@ class IMDbCache:
 
             results = cur.execute(sql, params)
             rows = results.fetchall()
+
+            if sort_key is not None:
+                rows = sorted(rows, key=sort_key)
 
             values = [row['value'] for row in rows if row['value'] is not None]
 
