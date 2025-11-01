@@ -284,8 +284,9 @@ class IMDbCache:
         return await self._exe(self._count_task)
 
     async def autocomplete(
-            self, query: str, key: str, *,
-            n: int = 25, post_proc: Callable[[str], str] = None
+            self, query: str, key: str, *, n: int = 25,
+            post_proc: Callable[[str], str] = None,
+            sort_key: Callable[[Any], Any] = None
     ) -> dict[str, str]:
         """Get top `n` matching values for a given key.
 
@@ -298,7 +299,10 @@ class IMDbCache:
                 Limit on the length of the return value.
             post_proc (Callable, optional):
                 Post processing function to clean up results.
+            sort_key (Callable, optional):
+                Sorting key to organize results.
         """
         return await self._exe(
-            self._autocomplete_task, query, key, n=n, post_proc=post_proc
+            self._autocomplete_task, query, key,
+            n=n, post_proc=post_proc, sort_key=sort_key
         )
