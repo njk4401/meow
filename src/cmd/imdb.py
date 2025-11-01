@@ -1,4 +1,5 @@
 import random
+import logging
 import functools
 from typing import Any
 
@@ -21,15 +22,57 @@ class IMDbCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self.bot.loop.create_task(self._load_autocompletions())
 
+    #==========================================================================
+    # Internal
+    #==========================================================================
     async def _exe(self, func, *args, **kwargs):
         """Execute blocking function calls in a separate thread."""
         partial = functools.partial(func, *args, **kwargs)
         return await self.bot.loop.run_in_executor(None, partial)
 
+    async def _load_autocompletions(self) -> None:
+        """Fetch all unique genres/coutries once on startup."""
+        try:
+            logging.info('Caching autocompletions for genres and countries...')
+            cache = IMDbCache()
+
+            genres = await cache.autocomplete('', 'genres[*]', n=100)
+            self.genres = tuple(sorted(genres))
+
+            countries = await cache.autocomplete(
+                '', 'originCountries[0].name',
+                post_proc=lambda s: s.split('(')[0].strip()
+            )
+            self.countries = tuple(sorted(countries))
+
+            logging.info(
+                '  Autocomplete cache loaded: '
+                f'{len(self.genres)} genres, {len(self.countries)} countries'
+            )
+        except Exception:
+            logging.exception(f'Failed to cache autocompletions.')
+
     #==========================================================================
     # Slash Commands
     #==========================================================================
+    @slash_command(description='reload cached autocompletions')
+    @need_clearance(MEDIUM_CLEARANCE)
+    async def reload(self, interaction: Interaction) -> None:
+        """Cache reload slash command."""
+        await interaction.response.defer()
+
+        count = await IMDbCache().count()
+        await self._load_autocompletions()
+
+        summary = (
+            f'Total Entries: {count}\n'
+            f'  {len(self.genres)} genres\n'
+            f'  {len(self.countries)} countries'
+        )
+        await interaction.followup.send(md.mono(summary))
+
     @slash_command(description='create a spreadsheeet')
     @need_clearance(MEDIUM_CLEARANCE)
     async def spreadsheet(self, interaction: Interaction,
@@ -153,21 +196,20 @@ class IMDbCog(commands.Cog):
     async def title_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for title parameters."""
         choices = await IMDbCache().autocomplete(query, 'primaryTitle')
+        # Pass through lru_cached function
+        choices = autocomplete(tuple(choices), query)
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('genre')
     async def genre_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for genre parameters."""
-        choices = await IMDbCache().autocomplete(query, 'genres[*]')
+        choices = autocomplete(self.genres, query)
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('country')
     async def country_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for country parameters."""
-        choices = await IMDbCache().autocomplete(
-            query, 'originCountries[*].name',
-            post_proc=lambda s: s.split('(')[0].strip()
-        )
+        choices = autocomplete(self.countries, query)
         await interaction.response.send_autocomplete(choices)
 
 
