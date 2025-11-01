@@ -1,8 +1,8 @@
+import random
 import asyncio
-import aiofiles
-from random import randint
 from typing import Any
 
+import aiofiles
 from nextcord import Embed, File, Interaction, SlashOption, slash_command
 from nextcord.ext import commands
 
@@ -21,7 +21,10 @@ class IMDbCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.loop = bot.loop
+
+    async def _exe(self, func, *args):
+        """Execute blocking function calls in a separate thread."""
+        return await self.bot.loop.run_in_executor(None, func, *args)
 
     #==========================================================================
     # Slash Commands
@@ -52,7 +55,7 @@ class IMDbCog(commands.Cog):
             await interaction.followup.send('Valid minimum ranking: [1, 10]')
             return
 
-        await self.loop.run_in_executor(None, ss_maker, dict(
+        await self._exe(ss_maker, dict(
             base_filters=dict(
                 titles={'movie'},
                 min_votes=min_votes,
@@ -141,7 +144,7 @@ class IMDbCog(commands.Cog):
             await interaction.followup.send('No matches for the given filter')
             return
 
-        pick = data[randint(0, len(data)-1)]
+        pick = random.sample(data, 1)
         await interaction.followup.send(embed=make_embed(pick))
 
     #==========================================================================
@@ -151,24 +154,24 @@ class IMDbCog(commands.Cog):
     async def title_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for title parameters."""
         async with IMDbCache() as cache:
-            entries = await cache.matching(query, 'primaryTitle')
-        titles = tuple(row['primaryTitle'].strip() for row in entries[:25])
-        choices = autocomplete(titles, query)
+            choices = await cache.matching(query, 'primaryTitle')
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('genre')
     async def genre_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for genre parameters."""
         async with IMDbCache() as cache:
-            entries = await cache.matching(query, 'genre[*]')
-        genres = tuple()
-        choices = autocomplete(tuple(sorted(self.genres)), query)
+            choices = await cache.matching(query, 'genres[*]')
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('country')
     async def country_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for country parameters."""
-        choices = autocomplete(tuple(sorted(self.countries)), query)
+        async with IMDbCache() as cache:
+            choices = await cache.matching(
+                query, 'originCountries[*].name',
+                post_proc=lambda s: s.split('(')[0].strip()
+            )
         await interaction.response.send_autocomplete(choices)
 
 

@@ -4,7 +4,7 @@ import asyncio
 import logging
 import sqlite3
 from os import PathLike
-from typing import Any, Self
+from typing import Any, Callable, Self
 
 from src.util import chunks, fetch
 
@@ -29,8 +29,8 @@ class IMDbCache:
         Example:
         ```
             async with IMDbCache() as cache:
-                cache.add('tt003234', 'tt1234567')
-                entries = cache.query('startYear', 1996)
+                await cache.add('tt003234', 'tt1234567')
+                entries = await cache.query('startYear', 1996)
         ```
         """
         self.db = db
@@ -106,6 +106,20 @@ class IMDbCache:
                 """, (title['id'], json.dumps(title), time.time()))
             await self._exe(self.conn.commit)
 
+    def _get_sql_condition(self, key: str, value: Any) -> tuple[str, tuple]:
+        """Build a SQL condition string and parameters for a given value."""
+        # Substring matching
+        if isinstance(value, str):
+            return f'{key} LIKE ?', (f'%{value}%',)
+        # Exact numeric matching
+        if isinstance(value, (int, float)):
+            return f'{key} = ?', (value,)
+        # Numeric range matching
+        if isinstance(value, tuple) and len(value) == 2:
+            return f'{key} BETWEEN ? and ?', (value[0], value[1])
+
+        return '1=0', ()
+
     async def query(self, *queries: tuple[str, Any],
                     union: bool = False) -> list[dict[str, Any]]:
         """Query by JSON key.
@@ -134,128 +148,121 @@ class IMDbCache:
             )
         ```
         """
-        base_sql = 'SELECT data FROM titles'
+        if not queries:
+            await self._exe(self.cur.execute, 'SELECT data FROM titles')
+            all_entries = await self._exe(self.cur.fetchall)
+            return [json.loads(entry['data']) for entry in all_entries]
+
         where = []
         params = []
 
         for key, value in queries:
+            # Skip if value explicitly given as None
             if value is None:
                 continue
 
-            # Build key path for json_extract call
-            key_path = '$.'+key.replace('[*]', '')
-
             # Convert [*] to json_each paths
             if '[*]' in key:
-                array, *rest = key.split('[*]')
-                array_path = '$.'+array
+                array_path, sub_path = key.split('[*]', maxsplit=1)
+                array_path = f'$.{array_path}'
 
-                sub_path = None
-                if rest and rest[0]:
-                    sub_path = '$.'+rest[0].lstrip('.')
+                if sub_path:
+                    sub_path = f'$.{sub_path.lstrip('.')}'
+                    value_check = f"json_extract(value, '{sub_path}')"
+                else:
+                    value_check = 'value'
 
-                json_col = f'json_extract(value,)'
+                condition = self._get_sql_condition(value_check, value)
 
-                self.cur.execute("""
-                    SELECT DISTINCT t.data
-                    FROM titles t, json_each(t.data, ?)
-                """, (f'$.{array}',)
-                )
-                for entry in self.cur.fetchall():
-                    data = json.loads(entry['data'])
-                    entries.extend(self._match_path(data, key, val))
+                sub_query = f"""
+                    id IN (
+                        SELECT t.id
+                        FROM titles t, json_each(t.data, ?)
+                        WHERE {condition[0]}
+                    )
+                """
+                where.append(sub_query)
+                params.append(array_path)
+                params.extend(condition[1])
             else:
-                self.cur.execute('SELECT data FROM titles')
-                for entry in self.cur.fetchall():
-                    data = json.loads(entry['data'])
-                    entries.extend(self._match_path(data, key, val))
+                key_path = f'$.{key}'
+                json_path = 'json_extract(data, ?)'
+                condition = self._get_sql_condition(json_path, value)
 
-            # Remove duplicate entries
-            entries_by_id.update({entry['id']: entry for entry in entries})
-            query_results.append({entry['id'] for entry in entries})
+                where.append(condition[0])
+                params.append(key_path)
+                params.extend(condition[1])
 
-        if union:
-            final_entries = set.union(*query_results)
-        else:
-            final_entries = set.intersection(*query_results)
+        if not where:
+            return await self.query()  # Return all
 
-        return [entries_by_id[i] for i in final_entries]
+        sep = ' OR ' if union else ' AND '
+        sql = f'SELECT data FROM titles WHERE {sep.join(where)}'
 
-    def _match_path(self, data: dict[str, Any],
-                    key: str, value: Any) -> list[dict[str, Any]]:
-        """Recursively traverse data according to key
-        and return matching entries. (synchronous)
-        """
-        matches = []
-
-        def match_leaf(curr):
-            # Numeric Range
-            if (isinstance(curr, (int, float)) and
-                isinstance(value, tuple) and len(value) == 2):
-                min_val, max_val = value
-                return min_val <= curr <= max_val
-            # Exact Value
-            if isinstance(curr, (int, float)):
-                return curr == value
-            # Substring Match
-            if isinstance(curr, str):
-                return value.lower() in curr.lower()
-            return False
-
-        def recurse(curr, rem):
-            if curr is None:
-                return
-            if not rem:
-                if value is None:
-                    matches.append(data)
-                    return
-                if isinstance(curr, list):
-                    if any(match_leaf(v) for v in curr):
-                        matches.append(data)
-                elif match_leaf(curr):
-                    matches.append(data)
-            else:
-                part, *rest = rem
-                if (part == '[*]') and isinstance(curr, list):
-                    for item in curr:
-                        recurse(item, rest)
-                elif isinstance(curr, dict) and part in curr:
-                    recurse(curr[part], rest)
-
-        parts = []
-        for part in key.split('.'):
-            if '[*]' in part:
-                parts.extend([part.replace('[*]', ''), '[*]'])
-            else:
-                parts.append(part)
-
-        recurse(data, parts)
-        return matches
+        await self._exe(self.cur.execute, sql, tuple(params))
+        results = await self._exe(self.cur.fetchall)
+        return [json.loads(entry['data']) for entry in results]
 
     async def count(self) -> int:
         """Return number of cached entries."""
         await self._exe(self.cur.execute, 'SELECT COUNT(*) FROM titles')
         return await self._exe(self.cur.fetchone)[0]
 
-    async def matching(self, query: str, key: str, n: int = 25) -> tuple[dict]:
-        """Get top `n` matching rows for `key` from DB.
+    async def matching(
+            self, query: str, key: str, n: int = 25, *,
+            post_proc: Callable[[str], str] = None
+    ) -> dict[str, str]:
+        """Get top `n` matching values for a given key.
 
         Parameters:
             query (str):
-                Query to match against.
+                Search query to match against.
             key (str):
-                JSON key which to match its value against `query`.
+                JSON key path to search through.
             n (int):
                 Limit on the length of the return value.
+            post_proc (Callable, optional):
+                Post processing function to clean up results.
         """
-        results = await self._exe(self.cur.execute, """
-            SELECT DISTINCT json_extract(data, '$.?') as entries
-            FROM entries
-            WHERE entries LIKE ?
-            ORDER BY entries
-            LIMIT ?
-        """, (key, f'%{query}%', n))
-        return tuple(self._exe(results.fetchall))
+        if '[*]' in key:
+            array_path, sub_path = key.split('[*]', maxsplit=1)
+            array_path = f'$.{array_path}'
+
+            if sub_path:
+                sub_path = f'$.{sub_path}'
+                value_check = f"json_extract(value, '{sub_path}')"
+            else:
+                value_check = 'value'
+
+            sql = f"""
+                SELECT DISTINCT {value_check} as value
+                FROM titles, json_each(data, ?)
+                WHERE value LIKE ?
+                ORDER BY value
+                LIMIT {n}
+            """
+            params = (array_path, f'%{query}%')
+        else:
+            key_path = f'$.{key}'
+            sql = f"""
+                SELECT DISTINCT json_extract(data, ?) as value
+                FROM titles
+                WHERE value LIKE ?
+                ORDER BY value
+                LIMIT {n}
+            """
+            params = (key_path, f'%{query}%')
+
+        results = await self._exe(self.cur.execute, sql, params)
+        rows = await self._exe(results.fetchall)
+
+        values = [row['value'] for row in rows if row['value'] is not None]
+
+        if post_proc is not None:
+            values = {post_proc(v) for v in values}
+
+        cleaned = sorted(values)
+        return dict(zip(cleaned, cleaned))
 
     async def close(self):
         """Close the database connection."""
