@@ -188,59 +188,53 @@ class IMDbCache:
 
     def _autocomplete_task(
             self, query: str, key: str, *, n: int = 25,
-            post_proc: Callable[[str], str] = None, sort_key: str = None
+            post_proc: Callable[[str], str] = None
     ) -> dict[str, str]:
         """Task to be ran by executor for generating autocompletion results."""
         conn, cur = self._sql_setup()
         try:
-            params = []
             if '[*]' in key:
-                key_path = 'j.value'
-                array_path = f'$.{key.split('[*]')[0]}'
-                params.insert(0, array_path)
-                params.append(f'%{query}%')
-                order = 'ORDER BY key'
-                sql = f"""
-                    SELECT DISTINCT {key_path} AS key, {key_path} AS value
-                    FROM titles, json_each(data, ?) AS j
-                    WHERE key LIKE ?
-                    {order}
-                    LIMIT {n}
-                """
-            else:
-                key_path = f"json_extract(data, '$.{key})"
-                params = [f'%{query}%']
-                if sort_key is not None:
-                    sort_path = f'$.{sort_key}'
-                    order = (
-                        f'ORDER BY CAST(json_extract(data, ?) AS REAL) '
-                        'DESC NULLS LAST'
-                    )
-                    params.append(sort_path)
-                else:
-                    order = 'ORDER BY key'
-                sql = f"""
-                    SELECT DISTINCT {key_path} AS key, {key_path} AS value
-                    FROM titles
-                    WHERE key LIKE ?
-                    {order}
-                    LIMIT {n}
-                """
+                array_path, sub_path = key.split('[*]', maxsplit=1)
+                array_path = f'$.{array_path}'
 
-            cur.execute(sql, tuple(params))
-            rows = cur.fetchall()
+                if sub_path:
+                    sub_path = f'${sub_path}'
+                    value_check = f"json_extract(value, '{sub_path}')"
+                else:
+                    value_check = 'value'
+
+                sql = f"""
+                    SELECT DISTINCT {value_check} as value
+                    FROM titles, json_each(data, ?)
+                    WHERE value LIKE ?
+                    ORDER BY value
+                    LIMIT {n}
+                """
+                params = (array_path, f'%{query}%')
+            else:
+                key_path = f'$.{key}'
+                sql = f"""
+                    SELECT DISTINCT json_extract(data, ?) as value
+                    FROM titles
+                    WHERE value LIKE ?
+                    ORDER BY value
+                    LIMIT {n}
+                """
+                params = (key_path, f'%{query}%')
+
+            results = cur.execute(sql, params)
+            rows = results.fetchall()
+
+            values = [row['value'] for row in rows if row['value'] is not None]
 
             if post_proc is not None:
-                choices = {row['key']: post_proc(row['value']) for row in rows
-                           if row['key'] is not None}
-            else:
-                choices = {row['key']: row['value'] for row in rows
-                           if row['key'] is not None}
-            return choices
-        except Exception as e:
-            logging.error(f'Rolling back database due to error - {e}')
+                values = {post_proc(v) for v in values}
+
+            cleaned = sorted(values)
+            return dict(zip(cleaned, cleaned))
+        except Exception:
+            logging.exception('Rolling back database due to error')
             conn.rollback()
-            return {}
         finally:
             conn.close()
 
@@ -286,8 +280,8 @@ class IMDbCache:
         return await self._exe(self._count_task)
 
     async def autocomplete(
-            self, query: str, key: str, *, n: int = 25,
-            post_proc: Callable[[str], str] = None, sort_key: str = None
+            self, query: str, key: str, *,
+            n: int = 25, post_proc: Callable[[str], str] = None
     ) -> dict[str, str]:
         """Get top `n` matching values for a given key.
 
@@ -300,10 +294,7 @@ class IMDbCache:
                 Limit on the length of the return value.
             post_proc (Callable, optional):
                 Post processing function to clean up results.
-            sort_key (str, optional):
-                JSON key path to sort autocompletion results by.
         """
         return await self._exe(
-            self._autocomplete_task, query, key,
-            n=n, post_proc=post_proc, sort_key=sort_key
+            self._autocomplete_task, query, key, n=n, post_proc=post_proc
         )
