@@ -34,10 +34,10 @@ def id_update_task() -> None:
         )
 
         if not any(files_downloaded) and movie_ids:
-            logging.info('  No new files')
+            logging.info('No new files')
             return
 
-        logging.info('  Fresh data found. Reloading database on disk...')
+        logging.info('Fresh data found. Reloading database on disk...')
 
         basics = []
         sections = pd.read_csv(
@@ -57,7 +57,7 @@ def id_update_task() -> None:
         # Filter only movies with ratings
         basics = basics.merge(ratings, on='tconst', how='inner')
 
-        logging.info('    Database reloaded')
+        logging.info('Database reloaded')
         movie_ids.update(basics['tconst'])
         logging.info(f'Total Entries: {len(movie_ids)}')
     except Exception:
