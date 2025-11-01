@@ -136,7 +136,7 @@ class IMDbCog(commands.Cog):
 
         data = await IMDbCache().query(
             ('genres[*]', genre),
-            ('originCountries[*].name', country),
+            ('originCountries[0].name', country),
             ('startYear', year),
             ('startYear', (year_min, year_max)),
             ('rating.aggregateRating', rating),
