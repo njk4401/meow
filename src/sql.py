@@ -193,10 +193,12 @@ class IMDbCache:
         """Task to be ran by executor for generating autocompletion results."""
         conn, cur = self._sql_setup()
         try:
+            params = []
             if '[*]' in key:
                 key_path = 'j.value'
                 array_path = f'$.{key.split('[*]')[0]}'
                 params.insert(0, array_path)
+                params.append(f'%{query}%')
                 order = 'ORDER BY key'
                 sql = f"""
                     SELECT DISTINCT {key_path} AS key, {key_path} AS value
@@ -205,8 +207,6 @@ class IMDbCache:
                     {order}
                     LIMIT {n}
                 """
-                if sort_key is not None:
-                    params.pop()
             else:
                 key_path = f"json_extract(data, '$.{key})"
                 params = [f'%{query}%']
@@ -229,13 +229,18 @@ class IMDbCache:
 
             cur.execute(sql, tuple(params))
             rows = cur.fetchall()
-            if post_proc is not None:
-                rows = {post_proc(row) for row in rows}
 
-            return dict(zip(rows['key'], rows['value']))
-        except Exception:
-            logging.exception('Rolling back database due to error')
+            if post_proc is not None:
+                choices = {row['key']: post_proc(row['value']) for row in rows
+                           if row['key'] is not None}
+            else:
+                choices = {row['key']: row['value'] for row in rows
+                           if row['key'] is not None}
+            return choices
+        except Exception as e:
+            logging.error(f'Rolling back database due to error - {e}')
             conn.rollback()
+            return {}
         finally:
             conn.close()
 
