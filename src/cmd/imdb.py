@@ -152,26 +152,22 @@ class IMDbCog(commands.Cog):
     @info.on_autocomplete('title')
     async def title_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for title parameters."""
-        matches = await IMDbCache().query(('primaryTitle', query))
-        titles = tuple(row['primaryTitle'].strip() for row in matches)
-        choices = autocomplete(titles, query)
+        choices = await IMDbCache().autocomplete(query, 'primaryTitle')
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('genre')
     async def genre_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for genre parameters."""
-        matches = await IMDbCache().query(('genres[*]', query))
-        genres = tuple(g.strip() for row in matches for g in row['genres'])
-        choices = autocomplete(genres, query)
+        choices = await IMDbCache().autocomplete(query, 'genres[*]')
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('country')
     async def country_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for country parameters."""
-        matches = await IMDbCache().query(('originCountries[0].name', query))
-        countries = tuple(row['originCountries'][0]['name'].split('(').strip()
-                          for row in matches)
-        choices = autocomplete(countries, query)
+        choices = await IMDbCache().autocomplete(
+            query, 'originCountries[*].name',
+            post_proc=lambda s: s.split('(')[0].strip()
+        )
         await interaction.response.send_autocomplete(choices)
 
 
