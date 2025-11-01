@@ -44,9 +44,13 @@ async def on_ready() -> None:
 async def on_application_command_error(
     interaction: Interaction, e: Exception
 ) -> None:
-    logging.exception(
-        f'Error running /{interaction.application_command.name}:'
-    )
+    try:
+        raise e
+    except Exception:
+        logging.exception(
+            f'Error running /{interaction.application_command.name}:'
+        )
+
     if interaction.response.is_done():
         await interaction.followup.send(
             'Error - Check log for details', ephemeral=True
