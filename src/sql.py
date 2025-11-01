@@ -134,7 +134,7 @@ class IMDbCache:
                     array_path = f'$.{array_path}'
 
                     if sub_path:
-                        sub_path = f'$.{sub_path.lstrip('.')}'
+                        sub_path = f'${sub_path}'
                         value_check = f"json_extract(value, '{sub_path}')"
                     else:
                         value_check = 'value'
@@ -199,7 +199,7 @@ class IMDbCache:
                 array_path = f'$.{array_path}'
 
                 if sub_path:
-                    sub_path = f'$.{sub_path}'
+                    sub_path = f'${sub_path}'
                     value_check = f"json_extract(value, '{sub_path}')"
                 else:
                     value_check = 'value'
