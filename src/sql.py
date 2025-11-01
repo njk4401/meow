@@ -228,8 +228,11 @@ class IMDbCache:
                 """
 
             cur.execute(sql, tuple(params))
-            row = [r for r in cur.fetchall() if r['key']]
-            return dict(zip(row['key'], row['value']))
+            rows = cur.fetchall()
+            if post_proc is not None:
+                rows = {post_proc(row) for row in rows}
+
+            return dict(zip(rows['key'], rows['value']))
         except Exception:
             logging.exception('Rolling back database due to error')
             conn.rollback()
