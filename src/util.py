@@ -172,32 +172,30 @@ def fetch_sync(url: str, timeout: float = 15, retries: int = 5) -> JSON | None:
 # Discord related
 #==============================================================================
 @lru_cache
-def autocomplete(vals: dict[str, Any] | tuple[str],
-                 query: str) -> dict[str, Any]:
+def autocomplete(choices: tuple[tuple[str, Any]], query: str, *,
+                 n: int = 25) -> dict[str, Any]:
     """Generate a dictionary of autocompletions based on a query.
+    (Case-Insensitive)
 
     Parameters:
-        vals (dict | tuple):
-            If given as a dict, will use the keys as autocompletions
-            and values as what will be sent to Discord.
-            If given as a tuple, will use the elements as autocompletions
-            and also as what will be sent to Discord.
+        choices (tuple):
+            Nested tuple of key-value pairs.
+            The "keys" will be what is displayed to the user.
+            The "values" will be what is sent to an interaction.
         query (str):
             The current query.
+        n (int):
+            Number of pairs within the return dictionary.
+            Note: Discord has a hard limit of 25 entries for autocompletions.
 
     Returns:
         matches (dict):
-            Dictionary derived from `vals` where query was
-            a substring in any of the keys or elements.
+            Dictionary derived from `displayed` and `values` where
+            query is a substring in any of the elements of `displayed`.
     """
-    # Cast to dict if given as a sequence
-    if not isinstance(vals, dict):
-        vals = dict(zip(vals, vals))
-
+    choices = dict(choices)
     if not query:
-        matches = sorted(vals.keys())
+        matches = sorted(choices)
     else:
-        matches = sorted(v for v in vals if query.lower() in v.lower())
-
-    # Discord has a limit of 25 autocompletions
-    return {key: vals[key] for key in matches[:25]}
+        matches = sorted(c for c in choices if query.lower() in c.lower())
+    return {key: choices[key] for key in matches[:n]}

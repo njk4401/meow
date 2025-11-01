@@ -158,7 +158,7 @@ class IMDbCog(commands.Cog):
         """Autocompletion for title parameters."""
         choices = await IMDbCache().autocomplete(query, 'primaryTitle')
         # Pass through lru_cached function
-        choices = autocomplete(choices, query)
+        choices = autocomplete(tuple(choices.items()), query)
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('genre')
@@ -166,7 +166,7 @@ class IMDbCog(commands.Cog):
         """Autocompletion for genre parameters."""
         choices = await IMDbCache().autocomplete(query, 'genres[*]')
         # Pass through lru_cached function
-        choices = autocomplete(choices, query)
+        choices = autocomplete(tuple(choices.items()), query)
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('country')
@@ -177,7 +177,7 @@ class IMDbCog(commands.Cog):
             post_proc=lambda s: s.split('(')[0].strip()
         )
         # Pass through lru_cached function
-        choices = autocomplete(choices, query)
+        choices = autocomplete(tuple(choices.items()), query)
         await interaction.response.send_autocomplete(choices)
 
 
