@@ -133,6 +133,41 @@ async def fetch(
     logging.error(f'Failed to fetch {url} after {retries} attempts')
     return None
 
+def fetch_sync(url: str, timeout: float = 15, retries: int = 5) -> JSON | None:
+    """Fetch a JSON url endpoint synchronously.
+
+    Parameters:
+        url (str):
+            URL to fetch.
+        timeout (float):
+            Fetch timeout in seconds.
+        retries (int):
+            Number of fetch attempts if request returns error.
+
+    Returns:
+        response (JSON | None):
+            JSON response if fetch was successful, otherwise None.
+    """
+    for attempt in range(retries):
+        try:
+            resp = requests.get(url, timeout=timeout)
+            resp.raise_for_status()
+            return resp.json()
+        # If error raised, wait and retry
+        except requests.RequestException as e:
+            logging.warning(
+                f'Fetch attempt {attempt+1} failed for {url}: {e}'
+            )
+            # Blocking delay
+            time.sleep(2**(attempt+1))
+        except requests.ConnectTimeout:
+            logging.warning(
+                f'Fetch attempt {attempt+1} timed out for {url}'
+            )
+
+    logging.error(f'Failed to fetch {url} after {retries} attempts')
+    return None
+
 #==============================================================================
 # Discord related
 #==============================================================================

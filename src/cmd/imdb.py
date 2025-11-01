@@ -1,5 +1,5 @@
 import random
-import asyncio
+import functools
 from typing import Any
 
 import aiofiles
@@ -22,9 +22,10 @@ class IMDbCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    async def _exe(self, func, *args):
+    async def _exe(self, func, *args, **kwargs):
         """Execute blocking function calls in a separate thread."""
-        return await self.bot.loop.run_in_executor(None, func, *args)
+        partial = functools.partial(func, *args, **kwargs)
+        return await self.bot.loop.run_in_executor(None, partial)
 
     #==========================================================================
     # Slash Commands
