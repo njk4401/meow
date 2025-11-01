@@ -188,7 +188,7 @@ class IMDbCache:
             conn.close()
 
     def _autocomplete_task(
-            self, query: str, key: str, n: int = 25, *,
+            self, query: str, key: str, *, n: int = 25,
             post_proc: Callable[[str], str] = None
     ) -> dict[str, str]:
         """Task to be ran by executor for generating autocompletion results."""
