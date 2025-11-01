@@ -144,7 +144,7 @@ class IMDbCog(commands.Cog):
             return
 
         pick = random.sample(data, 1)
-        await interaction.followup.send(embed=make_embed(pick))
+        await interaction.followup.send(embed=make_embed(pick[0]))
 
     #==========================================================================
     # Autocompletes
