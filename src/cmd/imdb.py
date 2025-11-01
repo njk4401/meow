@@ -156,9 +156,7 @@ class IMDbCog(commands.Cog):
     @info.on_autocomplete('title')
     async def title_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for title parameters."""
-        choices = await IMDbCache().autocomplete(
-            query, 'primaryTitle', sort_key='rating.voteCount'
-        )
+        choices = await IMDbCache().autocomplete(query, 'primaryTitle')
         # Pass through lru_cached function
         choices = autocomplete(tuple(choices.items()), query)
         await interaction.response.send_autocomplete(choices)
