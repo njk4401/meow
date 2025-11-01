@@ -187,58 +187,6 @@ class IMDbCache:
         finally:
             conn.close()
 
-    def _autocomplete_task(
-            self, query: str, key: str, n: int = 25, *,
-            post_proc: Callable[[str], str] = None
-    ) -> dict[str, str]:
-        """Task to be ran by executor for generating autocompletion results."""
-        conn, cur = self._sql_setup()
-        try:
-            if '[*]' in key:
-                array_path, sub_path = key.split('[*]', maxsplit=1)
-                array_path = f'$.{array_path}'
-
-                if sub_path:
-                    sub_path = f'${sub_path}'
-                    value_check = f"json_extract(value, '{sub_path}')"
-                else:
-                    value_check = 'value'
-
-                sql = f"""
-                    SELECT DISTINCT {value_check} as value
-                    FROM titles, json_each(data, ?)
-                    WHERE value LIKE ?
-                    ORDER BY value
-                    LIMIT {n}
-                """
-                params = (array_path, f'%{query}%')
-            else:
-                key_path = f'$.{key}'
-                sql = f"""
-                    SELECT DISTINCT json_extract(data, ?) as value
-                    FROM titles
-                    WHERE value LIKE ?
-                    ORDER BY value
-                    LIMIT {n}
-                """
-                params = (key_path, f'%{query}%')
-
-            results = cur.execute(sql, params)
-            rows = results.fetchall()
-
-            values = [row['value'] for row in rows if row['value'] is not None]
-
-            if post_proc is not None:
-                values = {post_proc(v) for v in values}
-
-            cleaned = sorted(values)
-            return dict(zip(cleaned, cleaned))
-        except Exception:
-            logging.exception('Rolling back database due to error')
-            conn.rollback()
-        finally:
-            conn.close()
-
     #==========================================================================
     # Public Async Methods
     #==========================================================================
@@ -279,23 +227,3 @@ class IMDbCache:
     async def count(self) -> int:
         """Return number of cached entries."""
         return await self._exe(self._count_task)
-
-    async def autocomplete(
-            self, query: str, key: str, *,
-            n: int = 25, post_proc: Callable[[str], str] = None
-    ) -> dict[str, str]:
-        """Get top `n` matching values for a given key.
-
-        Parameters:
-            query (str):
-                Search query to match against.
-            key (str):
-                JSON key path to search through.
-            n (int):
-                Limit on the length of the return value.
-            post_proc (Callable, optional):
-                Post processing function to clean up results.
-        """
-        return await self._exe(
-            self._autocomplete_task, query, key, n=n, post_proc=post_proc
-        )
