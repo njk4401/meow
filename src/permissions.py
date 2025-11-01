@@ -22,7 +22,7 @@ def check_perms(uid: str, clearance: int) -> bool:
     return uid in allowed
 
 
-def has_clearance(lvl: int):
+def need_clearance(lvl: int):
     """Decorator for application commands, checking whether a
     user has sufficient clearance before execution.
     """

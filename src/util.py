@@ -137,17 +137,16 @@ async def fetch(
 # Discord related
 #==============================================================================
 @lru_cache
-def autocomplete(vals: dict[str, Any] | Sequence[str],
+def autocomplete(vals: dict[str, Any] | tuple[str],
                  query: str) -> dict[str, Any]:
     """Generate a dictionary of autocompletions based on a query.
 
     Parameters:
-        vals (dict | Sequence):
+        vals (dict | tuple):
             If given as a dict, will use the keys as autocompletions
             and values as what will be sent to Discord.
-            If given as a sequence, will use the elements as autocompletions
+            If given as a tuple, will use the elements as autocompletions
             and also as what will be sent to Discord.
-            Can not be given an unhashable type.
         query (str):
             The current query.
 

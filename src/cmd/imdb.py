@@ -1,14 +1,15 @@
+import asyncio
+import aiofiles
 from random import randint
 from typing import Any
 
-import pandas as pd
 from nextcord import Embed, File, Interaction, SlashOption, slash_command
 from nextcord.ext import commands
 
 import src.md as md
 from src.sql import IMDbCache
 from src.util import autocomplete
-from src.permissions import MEDIUM_CLEARANCE, has_clearance
+from src.permissions import MEDIUM_CLEARANCE, need_clearance
 from lib.imdb import main as ss_maker
 
 
@@ -20,47 +21,13 @@ class IMDbCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self._load_cache()
-
-    #==========================================================================
-    # Internal
-    #==========================================================================
-    def _load_cache(self) -> None:
-        """Load local cache from SQL database."""
-        with IMDbCache() as cache:
-            data = pd.DataFrame(cache.query())
-
-        self.data = data
-        self.titles = {t.strip() for t in data['primaryTitle'].dropna()}
-        self.genres = {g.strip() for genre in data['genres'].dropna()
-                                 for g in genre}
-        self.countries = {c[0].get('name', 'N/A').split('(')[0].strip()
-                          for c in data['originCountries'].dropna()}
-
-    def _reload_cache(self) -> str:
-        """Reload local cache and return a diff summary."""
-        before = len(self.data)
-        self._load_cache()
-        return (
-            'Cache Successfully Reloaded\n'
-            f'Entries: {len(self.data)-before:+}\n'
-            f'Titles: {len(self.titles)}\n'
-            f'Genres: {len(self.genres)}\n'
-            f'Countries: {len(self.countries)}'
-        )
+        self.loop = bot.loop
 
     #==========================================================================
     # Slash Commands
     #==========================================================================
-    @slash_command(description='reload local cache with updated entries')
-    @has_clearance(MEDIUM_CLEARANCE)
-    async def reload(self, interaction: Interaction) -> None:
-        await interaction.response.defer()
-        summary = self._reload_cache()
-        await interaction.followup.send(md.mono(summary))
-
     @slash_command(description='create a spreadsheeet')
-    @has_clearance(MEDIUM_CLEARANCE)
+    @need_clearance(MEDIUM_CLEARANCE)
     async def spreadsheet(self, interaction: Interaction,
         min_votes: int = SlashOption(
             description='minimum number of votes title must have',
@@ -71,6 +38,7 @@ class IMDbCog(commands.Cog):
             required=False
         )
     ) -> None:
+        """Spreadsheet slash command."""
         await interaction.response.defer(ephemeral=True)
 
         min_votes = min_votes or 1000
@@ -84,16 +52,23 @@ class IMDbCog(commands.Cog):
             await interaction.followup.send('Valid minimum ranking: [1, 10]')
             return
 
-        ss_maker(
+        await self.loop.run_in_executor(None, ss_maker, dict(
             base_filters=dict(
                 titles={'movie'},
                 min_votes=min_votes,
                 ratings=(min_rating, 10)
             )
-        )
+        ))
 
-        with open('imdb.xlsx', 'rb') as f:
-            await interaction.followup.send(file=File(f, 'imdb.xlsx'))
+        try:
+            async with aiofiles.open('imdb.xlsx', 'rb') as f:
+                await interaction.followup.send(file=File(f, 'imdb.xlsx'))
+        except FileNotFoundError:
+            await interaction.followup.send(
+                'Error: Could not find the generated spreadsheet'
+            )
+        except Exception as e:
+            await interaction.followup.send(f'An error occurred: {e}')
 
     @slash_command(description='get info for a movie')
     async def info(self, interaction: Interaction,
@@ -102,10 +77,11 @@ class IMDbCog(commands.Cog):
             autocomplete=True
         )
     ) -> None:
+        """Info slash command."""
         await interaction.response.defer()
 
-        with IMDbCache() as cache:
-            data = cache.query(('primaryTitle', title))
+        async with IMDbCache() as cache:
+            data = await cache.query(('primaryTitle', title))
 
         if not data:
             await interaction.followup.send(md.mono('No matches'))
@@ -148,10 +124,11 @@ class IMDbCog(commands.Cog):
             required=False, default=10
         )
     ) -> None:
+        """Pickmovie slash command."""
         await interaction.response.defer()
 
-        with IMDbCache() as cache:
-            data = cache.query(
+        async with IMDbCache() as cache:
+            data = await cache.query(
                 ('genres[*]', genre),
                 ('originCountries[*].name', country),
                 ('startYear', year),
@@ -173,12 +150,18 @@ class IMDbCog(commands.Cog):
     @info.on_autocomplete('title')
     async def title_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for title parameters."""
-        choices = autocomplete(tuple(sorted(self.titles)), query)
+        async with IMDbCache() as cache:
+            entries = await cache.matching(query, 'primaryTitle')
+        titles = tuple(row['primaryTitle'].strip() for row in entries[:25])
+        choices = autocomplete(titles, query)
         await interaction.response.send_autocomplete(choices)
 
     @pickmovie.on_autocomplete('genre')
     async def genre_ac(self, interaction: Interaction, query: str) -> None:
         """Autocompletion for genre parameters."""
+        async with IMDbCache() as cache:
+            entries = await cache.matching(query, 'genre[*]')
+        genres = tuple()
         choices = autocomplete(tuple(sorted(self.genres)), query)
         await interaction.response.send_autocomplete(choices)
 
