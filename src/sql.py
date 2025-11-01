@@ -188,54 +188,48 @@ class IMDbCache:
 
     def _autocomplete_task(
             self, query: str, key: str, *, n: int = 25,
-            post_proc: Callable[[str], str] = None,
-            sort_key: Callable[[Any], Any] = None
+            post_proc: Callable[[str], str] = None, sort_key: str = None
     ) -> dict[str, str]:
         """Task to be ran by executor for generating autocompletion results."""
         conn, cur = self._sql_setup()
         try:
             if '[*]' in key:
-                array_path, sub_path = key.split('[*]', maxsplit=1)
-                array_path = f'$.{array_path}'
-
-                if sub_path:
-                    sub_path = f'${sub_path}'
-                    value_check = f"json_extract(value, '{sub_path}')"
-                else:
-                    value_check = 'value'
-
+                key_path = 'j.value'
+                array_path = f'$.{key.split('[*]')[0]}'
+                params.insert(0, array_path)
+                order = 'ORDER BY key'
                 sql = f"""
-                    SELECT DISTINCT {value_check} as value
-                    FROM titles, json_each(data, ?)
-                    WHERE value LIKE ?
-                    ORDER BY value
+                    SELECT DISTINCT {key_path} AS key, {key_path} AS value
+                    FROM titles, json_each(data, ?) AS j
+                    WHERE key LIKE ?
+                    {order}
                     LIMIT {n}
                 """
-                params = (array_path, f'%{query}%')
+                if sort_key is not None:
+                    params.pop()
             else:
-                key_path = f'$.{key}'
+                key_path = f"json_extract(data, '$.{key})"
+                params = [f'%{query}%']
+                if sort_key is not None:
+                    sort_path = f'$.{sort_key}'
+                    order = (
+                        f'ORDER BY CAST(json_extract(data, ?) AS REAL) '
+                        'DESC NULLS LAST'
+                    )
+                    params.append(sort_path)
+                else:
+                    order = 'ORDER BY key'
                 sql = f"""
-                    SELECT DISTINCT json_extract(data, ?) as value
+                    SELECT DISTINCT {key_path} AS key, {key_path} AS value
                     FROM titles
-                    WHERE value LIKE ?
-                    ORDER BY value
+                    WHERE key LIKE ?
+                    {order}
                     LIMIT {n}
                 """
-                params = (key_path, f'%{query}%')
 
-            results = cur.execute(sql, params)
-            rows = results.fetchall()
-
-            if sort_key is not None:
-                rows = sorted(rows, key=sort_key)
-
-            values = [row['value'] for row in rows if row['value'] is not None]
-
-            if post_proc is not None:
-                values = {post_proc(v) for v in values}
-
-            cleaned = sorted(values)
-            return dict(zip(cleaned, cleaned))
+            cur.execute(sql, tuple(params))
+            row = [r for r in cur.fetchall() if r['key']]
+            return dict(zip(row['key'], row['value']))
         except Exception:
             logging.exception('Rolling back database due to error')
             conn.rollback()
@@ -285,8 +279,7 @@ class IMDbCache:
 
     async def autocomplete(
             self, query: str, key: str, *, n: int = 25,
-            post_proc: Callable[[str], str] = None,
-            sort_key: Callable[[Any], Any] = None
+            post_proc: Callable[[str], str] = None, sort_key: str = None
     ) -> dict[str, str]:
         """Get top `n` matching values for a given key.
 
@@ -299,8 +292,8 @@ class IMDbCache:
                 Limit on the length of the return value.
             post_proc (Callable, optional):
                 Post processing function to clean up results.
-            sort_key (Callable, optional):
-                Sorting key to organize results.
+            sort_key (str, optional):
+                JSON key path to sort autocompletion results by.
         """
         return await self._exe(
             self._autocomplete_task, query, key,
