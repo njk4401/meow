@@ -4,7 +4,7 @@ import asyncio
 import logging
 from functools import lru_cache
 from itertools import islice
-from typing import Any, Generator, Iterable, Sequence
+from typing import Any, Callable, Generator, Iterable, Sequence
 
 import aiohttp
 import requests
@@ -186,8 +186,10 @@ def fetch_sync(url: str, timeout: float = 15, retries: int = 5) -> JSON | None:
 # Discord related
 #==============================================================================
 @lru_cache
-def autocomplete(choices: tuple[tuple[str, Any]], query: str, *,
-                 n: int = 25) -> dict[str, Any]:
+def autocomplete(
+    choices: tuple[tuple[str, Any]], query: str, *, n: int = 25,
+    post_proc: Callable[[Sequence[str]], Sequence[str]] = None
+) -> dict[str, Any]:
     """Generate a dictionary of autocompletions based on a query.
     (Case-Insensitive)
 
@@ -201,6 +203,8 @@ def autocomplete(choices: tuple[tuple[str, Any]], query: str, *,
         n (int):
             Number of pairs within the return dictionary.
             Note: Discord has a hard limit of 25 entries for autocompletions.
+        post_proc (Callable, optional):
+            Post processing function to filter/organize autocompleted results.
 
     Returns:
         matches (dict):
@@ -212,4 +216,6 @@ def autocomplete(choices: tuple[tuple[str, Any]], query: str, *,
         matches = sorted(choices)
     else:
         matches = sorted(c for c in choices if query.lower() in c.lower())
+    if post_proc is not None:
+        matches = post_proc(matches)
     return {key: choices[key] for key in matches[:n]}
