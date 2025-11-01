@@ -22,6 +22,16 @@ def chunks(it: Iterable, n: int) -> Generator[list, None, None]:
     while chunk := list(islice(it, n)):
         yield chunk
 
+def timestr(sec: float) -> str:
+    """Convert seconds to a formatted time string."""
+    if not isinstance(sec, (int, float)):
+        return str(sec)
+
+    secs = sec % 60
+    mins = (sec // 60) % 60
+    hours = sec // 3600
+    return f'{hours}:{mins:02}:{secs:02}'
+
 #==============================================================================
 # File management
 #==============================================================================

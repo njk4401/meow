@@ -9,7 +9,7 @@ from nextcord.ext import commands
 
 import src.md as md
 from src.sql import IMDbCache
-from src.util import autocomplete
+from src.util import autocomplete, timestr
 from src.permissions import MEDIUM_CLEARANCE, need_clearance
 from lib.imdb import main as ss_maker
 
@@ -217,16 +217,6 @@ def make_embed(entry: dict[str, Any]) -> Embed:
     embed.add_field(name='Interests', value=', '.join(interests))
 
     return embed
-
-
-def timestr(sec: float) -> str:
-    if not isinstance(sec, (int, float)):
-        return str(sec)
-
-    secs = sec % 60
-    mins = (sec // 60) % 60
-    hours = sec // 3600
-    return f'{hours}:{mins:02}:{secs:02}'
 
 
 def setup(bot: commands.Bot):
