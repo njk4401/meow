@@ -52,10 +52,11 @@ def id_update_task() -> None:
 
         ratings = pd.read_csv(
             'title.ratings.tsv.gz', sep='\t', na_values='\\N',
-            compression='gzip', usecols=('tconst',)
+            compression='gzip'
         )
         # Filter only movies with ratings
         basics = basics.merge(ratings, on='tconst', how='inner')
+        basics = basics[basics['numVotes'] >= 1000]
 
         logging.info('Database reloaded')
         movie_ids.update(basics['tconst'])
@@ -78,7 +79,7 @@ async def main() -> None:
                 continue
 
             total_ids = len(movie_ids)
-            start_time = time.time()
+            start_time = int(time.time())
 
             for i, batch in enumerate(chunks(sorted(movie_ids), 5)):
                 try:
@@ -86,16 +87,16 @@ async def main() -> None:
                 except Exception as e:
                     logging.error(f'Failed to cache batch: {batch} - {e}')
 
-                if i > 0 and i % 1000 == 0:
-                    elapsed = timestr(time.time() - start_time)
-                    progress = ((i*5)/total_ids) * 100
+                if i > 0 and i % 10 == 0:
+                    elapsed = timestr(int(time.time()) - start_time)
+                    progress = ((i+1)*5/total_ids) * 100
                     print(
-                        f'\r\x1b[0KProgress: {progress:.2f}% '
+                        f'\x1b[0KProgress: {progress:.2f}% '
                         f'(Elapsed: {elapsed})',
-                        end='', flush=True
+                        end='\r', flush=True
                     )
 
-            elapsed = timestr(time.time() - start_time)
+            elapsed = timestr(int(time.time()) - start_time)
             logging.info(f'Refresh finished in {elapsed}. Sleeping...')
             await asyncio.sleep(ONE_HOUR)
         except Exception:
